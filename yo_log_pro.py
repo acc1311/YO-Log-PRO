@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-YO Log PRO v9.2 - Professional Contest Logger
+YO Log PRO v9.3 - Professional Contest Logger
 Author: YO8ACR Ardei Constantin-Cătălin
 """
 
@@ -13,18 +13,13 @@ from tkinter import (
     ttk, messagebox, filedialog, StringVar, BooleanVar, IntVar, Menu
 )
 
-# ═══════════════════════════════════════════════════════════════
-#  DPI AWARENESS - Claritate text pe Windows
-# ═══════════════════════════════════════════════════════════════
+# DPI AWARENESS
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(1)
 except:
     pass
 
-# ═══════════════════════════════════════════════════════════════
-#  CONSTANTE ȘI CONFIGURAȚIE
-# ═══════════════════════════════════════════════════════════════
-
+# CONSTANTE
 BANDS = ["160m","80m","60m","40m","30m","20m","17m","15m","12m","10m","6m","2m"]
 MODES = ["SSB","CW","DIGI","FT8","FT4","RTTY","AM","FM"]
 
@@ -53,13 +48,8 @@ DEFAULT_CONFIG = {
     "judet": "NT",
     "category": "Single-Op Low",
     "font_size": 11,
-    "theme": "dark",
     "active_contest": "simple"
 }
-
-# ═══════════════════════════════════════════════════════════════
-#  FUNCȚII UTILITARE
-# ═══════════════════════════════════════════════════════════════
 
 def safe_save_json(filepath, data):
     try:
@@ -71,7 +61,7 @@ def safe_save_json(filepath, data):
         os.replace(tmp_path, filepath)
         return True
     except Exception as e:
-        print(f"Eroare salvare: {e}")
+        print(f"Error: {e}")
         return False
 
 def safe_load_json(filepath, default):
@@ -83,22 +73,17 @@ def safe_load_json(filepath, default):
     except:
         return default
 
-# ═══════════════════════════════════════════════════════════════
-#  APLICAȚIA PRINCIPALĂ
-# ═══════════════════════════════════════════════════════════════
-
 class App(Tk):
     def __init__(self):
         super().__init__()
-        self.title("YO Log PRO v9.2")
+        self.title("YO Log PRO v9.3")
         self.geometry("1300x850")
         
-        # Încărcare Date
         self.app_config = safe_load_json(FILES["config"], DEFAULT_CONFIG)
         self.log = safe_load_json(FILES["log"], [])
         self._editing_index = None
         
-        self.font_size = self.app_config.get("font_size", 11)
+        self.font_size = int(self.app_config.get("font_size", 11))
         self._setup_styles()
         self._build_ui()
         self._refresh_log()
@@ -115,37 +100,33 @@ class App(Tk):
         self.bold_font = ("Consolas", self.font_size, "bold")
 
     def _build_ui(self):
-        # Header / Toolbar
         header = Frame(self, bg=self.theme["header"], pady=5)
         header.pack(fill="x")
 
         Label(header, text="📡 YO Log PRO", font=("Consolas", self.font_size + 4, "bold"), 
               fg="#4fc3f7", bg=self.theme["header"]).pack(side="left", padx=15)
 
-        # Selector Mod Lucru
-        Label(header, text="Mod Lucru:", fg="white", bg=self.theme["header"], font=self.default_font).pack(side="left", padx=5)
+        Label(header, text="Mod:", fg="white", bg=self.theme["header"], font=self.default_font).pack(side="left", padx=5)
         self.cb_mode = ttk.Combobox(header, values=list(CONTEST_TYPES.values()), state="readonly", width=25)
         current_mode = CONTEST_TYPES.get(self.app_config["active_contest"], "Log Simplu")
         self.cb_mode.set(current_mode)
         self.cb_mode.pack(side="left", padx=5)
         self.cb_mode.bind("<<ComboboxSelected>>", self._on_mode_change)
 
-        # Info Stație (Dreapta)
-        self.info_lbl = Label(header, text=f"{self.app_config['callsign']} | {self.app_config['locator']} | {self.app_config['category']}", 
+        self.info_lbl = Label(header, text=f"{self.app_config['callsign']} | {self.app_config['locator']}", 
                               fg="#81c784", bg=self.theme["header"], font=self.bold_font)
         self.info_lbl.pack(side="right", padx=15)
 
-        # Formular introducere date
         self.form_frame = Frame(self, bg=self.theme["bg"], pady=15)
         self.form_frame.pack(fill="x", padx=10)
         self._draw_form()
 
-        # Tabel Log
         table_frame = Frame(self, bg=self.theme["bg"])
         table_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
-        self.tree = ttk.Treeview(table_frame, columns=("Data", "Ora", "Call", "Band", "Mode", "RST_S", "RST_R", "Note"), show="headings")
-        for col in ("Data", "Ora", "Call", "Band", "Mode", "RST_S", "RST_R", "Note"):
+        cols = ("Data", "Ora", "Call", "Band", "Mode", "RST_S", "RST_R", "Note")
+        self.tree = ttk.Treeview(table_frame, columns=cols, show="headings")
+        for col in cols:
             self.tree.heading(col, text=col)
             self.tree.column(col, width=100)
         
@@ -153,17 +134,15 @@ class App(Tk):
         sb = Scrollbar(table_frame, command=self.tree.yview)
         sb.pack(side="right", fill="y")
         self.tree.config(yscrollcommand=sb.set)
-        
         self.tree.bind("<Double-1>", self._on_tree_double_click)
 
-        # Bara de acțiuni (Jos)
         footer = Frame(self, bg=self.theme["header"], pady=5)
         footer.pack(fill="x")
 
         Button(footer, text="⚙ Setări Stație", command=self._open_settings, bg="#444", fg="white").pack(side="left", padx=10)
         Button(footer, text="📊 Statistici", command=self._show_stats, bg="#444", fg="white").pack(side="left", padx=5)
-        Button(footer, text="🗑 Șterge Selectat", command=self._delete_qso, bg="#c62828", fg="white").pack(side="right", padx=10)
-        Button(footer, text="💾 Salvează Tot", command=self._save_data, bg="#2e7d32", fg="white").pack(side="right", padx=5)
+        Button(footer, text="🗑 Șterge QSO", command=self._delete_qso, bg="#c62828", fg="white").pack(side="right", padx=10)
+        Button(footer, text="💾 Salvează Log", command=self._save_data, bg="#2e7d32", fg="white").pack(side="right", padx=5)
 
     def _draw_form(self):
         for widget in self.form_frame.winfo_children():
@@ -176,7 +155,6 @@ class App(Tk):
         for i, (label, key, width) in enumerate(fields):
             f = Frame(self.form_frame, bg=self.theme["bg"])
             f.grid(row=0, column=i, padx=5)
-            
             Label(f, text=label, fg="#bbb", bg=self.theme["bg"], font=("Consolas", 10)).pack()
             
             if key == "band":
@@ -188,7 +166,6 @@ class App(Tk):
             else:
                 e = Entry(f, font=self.default_font, width=width, bg=self.theme["entry_bg"], fg="white", insertbackground="white")
                 if key.startswith("rst"): e.insert(0, "59")
-            
             e.pack()
             self.entries[key] = e
 
@@ -199,10 +176,11 @@ class App(Tk):
     def _log_qso(self):
         call = self.entries["call"].get().upper().strip()
         if not call: return
-
+        
+        now = datetime.datetime.utcnow()
         qso_data = {
-            "date": datetime.datetime.utcnow().strftime("%Y-%m-%d"),
-            "time": datetime.datetime.utcnow().strftime("%H%M"),
+            "date": now.strftime("%Y-%m-%d"),
+            "time": now.strftime("%H%M"),
             "call": call,
             "band": self.entries["band"].get(),
             "mode": self.entries["mode"].get(),
@@ -226,7 +204,8 @@ class App(Tk):
     def _refresh_log(self):
         for i in self.tree.get_children(): self.tree.delete(i)
         for i, q in enumerate(self.log):
-            self.tree.insert("", "end", iid=i, values=(q["date"], q["time"], q["call"], q["band"], q["mode"], q["rst_s"], q["rst_r"], q["note"]))
+            v = (q["date"], q["time"], q["call"], q["band"], q["mode"], q["rst_s"], q["rst_r"], q["note"])
+            self.tree.insert("", "end", iid=i, values=v)
 
     def _clear_form(self):
         self.entries["call"].delete(0, "end")
@@ -236,11 +215,9 @@ class App(Tk):
     def _on_tree_double_click(self, event):
         item_id = self.tree.identify_row(event.y)
         if not item_id: return
-        
         idx = int(item_id)
         qso = self.log[idx]
         self._editing_index = idx
-
         self.entries["call"].delete(0, "end")
         self.entries["call"].insert(0, qso["call"])
         self.entries["band"].set(qso["band"])
@@ -251,33 +228,26 @@ class App(Tk):
         self.entries["rst_r"].insert(0, qso["rst_r"])
         self.entries["note"].delete(0, "end")
         self.entries["note"].insert(0, qso["note"])
-
         self.btn_log.config(text="UPDATE QSO", bg="#f57c00")
 
     def _delete_qso(self):
         sel = self.tree.selection()
         if not sel: return
-        if messagebox.askyesno("Confirmare", "Ștergi acest QSO?"):
+        if messagebox.askyesno("Confirmare", "Ștergeți QSO selectat?"):
             for item in sel:
-                idx = int(item)
-                self.log.pop(idx)
+                self.log.pop(int(item))
             self._refresh_log()
             self._save_data()
 
     def _open_settings(self):
         dlg = Toplevel(self)
-        dlg.title("Setări Stație")
+        dlg.title("Setări")
         dlg.geometry("400x550")
         dlg.configure(bg=self.theme["bg"])
         dlg.grab_set()
 
-        fields = [
-            ("Indicativ:", "callsign"),
-            ("Locator (KN37):", "locator"),
-            ("Județ:", "judet"),
-            ("Operator:", "operator")
-        ]
-        
+        fields = [("Callsign:", "callsign"), ("Locator:", "locator"), 
+                  ("Județ:", "judet"), ("Operator:", "operator")]
         set_entries = {}
         for label, key in fields:
             f = Frame(dlg, bg=self.theme["bg"], pady=5)
@@ -297,7 +267,7 @@ class App(Tk):
 
         f_font = Frame(dlg, bg=self.theme["bg"], pady=5)
         f_font.pack(fill="x", padx=20)
-        Label(f_font, text="Mărime Font:", fg="white", bg=self.theme["bg"]).pack(side="left")
+        Label(f_font, text="Font Size:", fg="white", bg=self.theme["bg"]).pack(side="left")
         sp_font = ttk.Spinbox(f_font, from_=8, to=24, width=5)
         sp_font.set(self.app_config.get("font_size", 11))
         sp_font.pack(side="right")
@@ -308,29 +278,27 @@ class App(Tk):
             self.app_config["category"] = cb_cat.get()
             self.app_config["font_size"] = int(sp_font.get())
             safe_save_json(FILES["config"], self.app_config)
-            messagebox.showinfo("Succes", "Setări salvate! Reporniți programul.")
+            messagebox.showinfo("OK", "Setări salvate! Reporniți programul.")
             self.info_lbl.config(text=f"{self.app_config['callsign']} | {self.app_config['locator']}")
             dlg.destroy()
 
         Button(dlg, text="SALVEAZĂ", command=save_settings, bg=self.theme["accent"], fg="white", pady=10).pack(fill="x", padx=20, pady=20)
 
     def _on_mode_change(self, event):
-        mode_name = self.cb_mode.get()
+        m_name = self.cb_mode.get()
         for k, v in CONTEST_TYPES.items():
-            if v == mode_name: self.app_config["active_contest"] = k
+            if v == m_name: self.app_config["active_contest"] = k
         safe_save_json(FILES["config"], self.app_config)
 
     def _show_stats(self):
         bands = Counter(q["band"] for q in self.log)
-        stats_list = []
-        for b, c in bands.items():
-            stats_list.append(f"{b}: {c} QSO")
-        
-        res = "
-".join(stats_list)
-        messagebox.showinfo("Statistici", f"Total: {len(self.log)} QSO
+        stats_msg = "Total: " + str(len(self.log)) + " QSO
 
-{res}")
+"
+        for b in sorted(bands.keys()):
+            stats_msg += b + ": " + str(bands[b]) + " QSO
+"
+        messagebox.showinfo("Stats", stats_msg)
 
     def _save_data(self):
         safe_save_json(FILES["log"], self.log)
