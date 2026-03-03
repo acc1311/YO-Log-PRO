@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-YO Log PRO v9.1 - Professional Contest Logger
+YO Log PRO v9.2 - Professional Contest Logger
 Author: YO8ACR Ardei Constantin-Cătălin
 """
 
@@ -14,7 +14,7 @@ from tkinter import (
 )
 
 # ═══════════════════════════════════════════════════════════════
-#  DPI AWARENESS
+#  DPI AWARENESS - Claritate text pe Windows
 # ═══════════════════════════════════════════════════════════════
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(1)
@@ -90,13 +90,13 @@ def safe_load_json(filepath, default):
 class App(Tk):
     def __init__(self):
         super().__init__()
-        self.title("YO Log PRO v9.1")
+        self.title("YO Log PRO v9.2")
         self.geometry("1300x850")
         
         # Încărcare Date
         self.app_config = safe_load_json(FILES["config"], DEFAULT_CONFIG)
         self.log = safe_load_json(FILES["log"], [])
-        self._editing_index = None # Index pentru editare
+        self._editing_index = None
         
         self.font_size = self.app_config.get("font_size", 11)
         self._setup_styles()
@@ -122,7 +122,7 @@ class App(Tk):
         Label(header, text="📡 YO Log PRO", font=("Consolas", self.font_size + 4, "bold"), 
               fg="#4fc3f7", bg=self.theme["header"]).pack(side="left", padx=15)
 
-        # Selector Concurs
+        # Selector Mod Lucru
         Label(header, text="Mod Lucru:", fg="white", bg=self.theme["header"], font=self.default_font).pack(side="left", padx=5)
         self.cb_mode = ttk.Combobox(header, values=list(CONTEST_TYPES.values()), state="readonly", width=25)
         current_mode = CONTEST_TYPES.get(self.app_config["active_contest"], "Log Simplu")
@@ -130,17 +130,17 @@ class App(Tk):
         self.cb_mode.pack(side="left", padx=5)
         self.cb_mode.bind("<<ComboboxSelected>>", self._on_mode_change)
 
-        # Info Stație
+        # Info Stație (Dreapta)
         self.info_lbl = Label(header, text=f"{self.app_config['callsign']} | {self.app_config['locator']} | {self.app_config['category']}", 
                               fg="#81c784", bg=self.theme["header"], font=self.bold_font)
         self.info_lbl.pack(side="right", padx=15)
 
-        # --- Zona Formular ---
+        # Formular introducere date
         self.form_frame = Frame(self, bg=self.theme["bg"], pady=15)
         self.form_frame.pack(fill="x", padx=10)
         self._draw_form()
 
-        # --- Zona Log (Tabel) ---
+        # Tabel Log
         table_frame = Frame(self, bg=self.theme["bg"])
         table_frame.pack(fill="both", expand=True, padx=10, pady=5)
 
@@ -156,7 +156,7 @@ class App(Tk):
         
         self.tree.bind("<Double-1>", self._on_tree_double_click)
 
-        # --- Bara de jos (Acțiuni) ---
+        # Bara de acțiuni (Jos)
         footer = Frame(self, bg=self.theme["header"], pady=5)
         footer.pack(fill="x")
 
@@ -241,7 +241,6 @@ class App(Tk):
         qso = self.log[idx]
         self._editing_index = idx
 
-        # Populează formularul
         self.entries["call"].delete(0, "end")
         self.entries["call"].insert(0, qso["call"])
         self.entries["band"].set(qso["band"])
@@ -268,13 +267,13 @@ class App(Tk):
     def _open_settings(self):
         dlg = Toplevel(self)
         dlg.title("Setări Stație")
-        dlg.geometry("400x500")
+        dlg.geometry("400x550")
         dlg.configure(bg=self.theme["bg"])
         dlg.grab_set()
 
         fields = [
             ("Indicativ:", "callsign"),
-            ("Locator (ex: KN37):", "locator"),
+            ("Locator (KN37):", "locator"),
             ("Județ:", "judet"),
             ("Operator:", "operator")
         ]
@@ -289,7 +288,6 @@ class App(Tk):
             e.pack(side="right")
             set_entries[key] = e
 
-        # Categorie
         f_cat = Frame(dlg, bg=self.theme["bg"], pady=5)
         f_cat.pack(fill="x", padx=20)
         Label(f_cat, text="Categorie:", fg="white", bg=self.theme["bg"]).pack(side="left")
@@ -297,10 +295,9 @@ class App(Tk):
         cb_cat.set(self.app_config.get("category", "Single-Op Low"))
         cb_cat.pack(side="right")
 
-        # Mărime Font
         f_font = Frame(dlg, bg=self.theme["bg"], pady=5)
         f_font.pack(fill="x", padx=20)
-        Label(f_font, text="Mărime Text (Font):", fg="white", bg=self.theme["bg"]).pack(side="left")
+        Label(f_font, text="Mărime Font:", fg="white", bg=self.theme["bg"]).pack(side="left")
         sp_font = ttk.Spinbox(f_font, from_=8, to=24, width=5)
         sp_font.set(self.app_config.get("font_size", 11))
         sp_font.pack(side="right")
@@ -311,8 +308,8 @@ class App(Tk):
             self.app_config["category"] = cb_cat.get()
             self.app_config["font_size"] = int(sp_font.get())
             safe_save_json(FILES["config"], self.app_config)
-            messagebox.showinfo("Succes", "Setări salvate! Reporniți aplicația pentru font.")
-            self.info_lbl.config(text=f"{self.app_config['callsign']} | {self.app_config['locator']} | {self.app_config['category']}")
+            messagebox.showinfo("Succes", "Setări salvate! Reporniți programul.")
+            self.info_lbl.config(text=f"{self.app_config['callsign']} | {self.app_config['locator']}")
             dlg.destroy()
 
         Button(dlg, text="SALVEAZĂ", command=save_settings, bg=self.theme["accent"], fg="white", pady=10).pack(fill="x", padx=20, pady=20)
@@ -325,11 +322,15 @@ class App(Tk):
 
     def _show_stats(self):
         bands = Counter(q["band"] for q in self.log)
-        stats = "
-".join([f"{b}: {c} QSO" for b, c in bands.items()])
-        messagebox.showinfo("Statistici Log", f"Total: {len(self.log)} QSO
+        stats_list = []
+        for b, c in bands.items():
+            stats_list.append(f"{b}: {c} QSO")
+        
+        res = "
+".join(stats_list)
+        messagebox.showinfo("Statistici", f"Total: {len(self.log)} QSO
 
-{stats}")
+{res}")
 
     def _save_data(self):
         safe_save_json(FILES["log"], self.log)
