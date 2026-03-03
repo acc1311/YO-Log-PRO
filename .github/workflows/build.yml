@@ -8,34 +8,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_windows:
-    runs-on: windows-latest
-
-    steps:
-    - name: Checkout cod
-      uses: actions/checkout@v4
-
-    - name: Setare Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-
-    - name: Instalare dependențe de build
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller
-
-    - name: Construire Executabil (PyInstaller)
-      run: |
-        pyinstaller --noconsole --onefile --name "YOLogPRO_v9" --collect-all tkinter yo_log_pro.py
-      # Notă: Înlocuiește 'main.py' cu numele fișierului tău dacă este diferit (ex: yo_log.py)
-
-    - name: Încărcare Artefact (Executabil)
-      uses: actions/upload-artifact@v4
-      with:
-        name: YO-Log-PRO-Windows-Exe
-        path: dist/YOLogPRO_v9.exe
-
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -50,5 +22,33 @@ jobs:
     - name: Verificare sintaxă (Flake8)
       run: |
         pip install flake8
-        # Verifică erorile critice de sintaxă
+        # Verificăm doar erorile critice (E9, F63, F7, F82)
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+  build_windows:
+    needs: lint
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout cod
+      uses: actions/checkout@v4
+
+    - name: Setare Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Instalare dependențe
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+
+    - name: Construire Executabil (PyInstaller)
+      run: |
+        pyinstaller --noconsole --onefile --name "YOLogPRO_v9" --collect-all tkinter yo_log_pro.py
+
+    - name: Încărcare Artefact (Executabil)
+      uses: actions/upload-artifact@v4
+      with:
+        name: YO-Log-PRO-v9-EXE
+        path: dist/YOLogPRO_v9.exe
