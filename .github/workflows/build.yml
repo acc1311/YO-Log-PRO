@@ -27,7 +27,7 @@ jobs:
 
     - name: Construire Executabil (PyInstaller)
       run: |
-        pyinstaller --noconsole --onefile --name "YOLogPRO_v9" --collect-all tkinter main.py
+        pyinstaller --noconsole --onefile --name "YOLogPRO_v9" --collect-all tkinter yo_log_pro.py
       # Notă: Înlocuiește 'main.py' cu numele fișierului tău dacă este diferit (ex: yo_log.py)
 
     - name: Încărcare Artefact (Executabil)
