@@ -108,23 +108,18 @@ LANG = {
         "cancel": "Cancel", "stations_worked": "Stations Worked",
         "total_score": "Total Score", "diploma_eligible": "Diploma Eligible",
         "validation_result": "Validation Result",
-        "maraton_category_a": "A. Senior YO (>18)",
-        "maraton_category_b": "B. YL",
-        "maraton_category_c": "C. Junior YO (<=18)",
-        "maraton_category_d": "D. Club",
-        "maraton_category_e": "E. DX",
-        "maraton_category_f": "F. SWL",
+        "maraton_category_a": "A. Senior YO (>18)", "maraton_category_b": "B. YL",
+        "maraton_category_c": "C. Junior YO (<=18)", "maraton_category_d": "D. Club",
+        "maraton_category_e": "E. DX", "maraton_category_f": "F. SWL",
         "score_20_pts": "20 pts (YP8IC, YR8TGN)",
         "score_10_pts": "10 pts (Neamț/Iași Clubs with /IC)",
         "score_5_pts": "5 pts (Neamț/Iași Hams with /IC)",
         "score_1_pt": "1 pt (Standard)",
         "enter_county": "Enter County (NT/IS for IC score):",
         "county_nt": "Neamț (NT)", "county_is": "Iași (IS)",
-        "stafeta_category_a": "A. Senior Teams",
-        "stafeta_category_b": "B. Junior Teams",
+        "stafeta_category_a": "A. Senior Teams", "stafeta_category_b": "B. Junior Teams",
         "stafeta_category_c": "C. Mixed Teams",
-        "yo_dx_category_a": "A. Single-Op High",
-        "yo_dx_category_b": "B. Single-Op Low",
+        "yo_dx_category_a": "A. Single-Op High", "yo_dx_category_b": "B. Single-Op Low",
         "yo_dx_category_c": "C. Multi-Op",
         "log_simplu_name": "Simple Log (Day Traffic)",
         "right_click_delete": "Delete QSO",
@@ -258,7 +253,7 @@ class ScoringEngine:
             calls = [qso["c"].upper() for qso in log_data]
             missing = [s for s in required if s not in calls]
             if missing:
-                return False, f"Missing required stations: {', '.join(missing)}", 0
+                return False, f"Missing required stations: {', '.join(missing)}", 0"
             if len(log_data) < contest_rules.get("min_qso_for_diploma", 100):
                 return False, f"Minimum {contest_rules['min_qso_for_diploma']} QSOs required for diploma, you have {len(log_data)}", 0
             total_score = sum(ScoringEngine.calculate_score(q, contest_rules, user_config) for q in log_data)
@@ -431,7 +426,7 @@ class RadioLogApp(tk.Tk):
         
         self.contest_keys = self.contest_manager.get_all_contest_keys()
         self.cb = ttk.Combobox(controls_frame, values=self.contest_keys, state="readonly", width=15)
-        self.cb.set(self.cfg.get("contest", "maraton"))
+        self.cb.set(self.cfg.get("contest"))
         self.cb.bind("<<ComboboxSelected>>", self.change_contest)
         self.cb.pack(side="left", padx=5)
         
@@ -531,95 +526,7 @@ class RadioLogApp(tk.Tk):
         
         self.tr = ttk.Treeview(t_f, columns=(1,2,3,4,5,6,7,8), show="headings", selectmode="browse")
         
-        widths = [150, 70, 70, 50, 50, 150, 90, 80]
-        for i, n in enumerate(cols, 1):
-            self.tr.heading(i, text=n)
-            self.tr.column(i, width=widths[i-1], anchor="center" if i < 7 else "w")
-        
-        self.tr.pack(side="left", fill="both", expand=True)
-        
-        sb = tk.Scrollbar(t_f, command=self.tr.yview)
-        sb.pack(side="right", fill="y")
-        self.tr.config(yscrollcommand=sb.set)
-        
-        self.tr.bind("<Button-3>", self.show_context_menu)
-        self.tr.bind("<Double-1>", self.ed)
-        
-        # Bottom Buttons
-        bt = tk.Frame(self, bg=self.th["hd"])
-        bt.pack(fill="x", pady=5)
-        
-        btn_style = {"bg": self.th["btn"], "fg": self.th["btn_fg"], "relief": "flat", "padx": 10, "font": self.fnt_main}
-        
-        tk.Button(bt, text=lang_manager.t("settings"), command=self.set, **btn_style).pack(side="left", padx=5)
-        tk.Button(bt, text=lang_manager.t("stats"), command=self.st, **btn_style).pack(side="left")
-        tk.Button(bt, text=lang_manager.t("validate"), command=self.validate, **btn_style).pack(side="left", padx=5)
-        tk.Button(bt, text=lang_manager.t("export"), command=self.export_menu, **btn_style).pack(side="left", padx=5)
-        tk.Button(bt, text=lang_manager.t("edit_contests"), command=self.edit_contests_ui, **btn_style).pack(side="left", padx=5)
-        
-        fr_btns = tk.Frame(bt, bg=self.th["hd"])
-        fr_btns.pack(side="right", padx=5)
-        
-        tk.Button(fr_btns, text=lang_manager.t("backup"), command=self.manual_backup, **btn_style).pack(side="right", padx=5)
-        
-        delete_btn_style = {"bg": "#c0392b", "fg": "white", "relief": "flat", "padx": 10, "font": self.fnt_main}
-        tk.Button(fr_btns, text=lang_manager.t("delete"), command=self.dl, **delete_btn_style).pack(side="right", padx=5)
-
-    def toggle_datetime_editable(self):
-        state = "normal" if self.manual_datetime_var.get() else "disabled"
-        self.en["d_manual"].config(state=state)
-        self.en["t_manual"].config(state=state)
-        
-        # Update LED and status
-        if state == "disabled":
-            self.led_canvas.itemconfig(self.led, fill=self.th["led_on"])
-            self.led_status_label.config(text=lang_manager.t("online"), fg=self.th["led_on"])
-            self.led_canvas.config(tooltip_text=lang_manager.t("led_tooltip_online"))
-            now = datetime.datetime.now()
-            self.en["d_manual"].delete(0, "end")
-            self.en["d_manual"].insert(0, now.strftime("%Y-%m-%d"))
-            self.en["t_manual"].delete(0, "end")
-            self.en["t_manual"].insert(0, now.strftime("%H:%M"))
-        else:
-            self.led_canvas.itemconfig(self.led, fill=self.th["led_off"])
-            self.led_status_label.config(text=lang_manager.t("offline"), fg=self.th["led_off"])
-            self.led_canvas.config(tooltip_text=lang_manager.t("led_tooltip_offline"))
-
-    def update_info_bar(self):
-        contest_rules = self.contest_manager.get_rules(self.cfg.get("contest"))
-        info_text = f"{self.cfg['call']} | {self.cfg['loc']} | {self.cfg['jud']} | {self.cfg.get('addr', '')}"
-        if contest_rules and "categories" in contest_rules:
-            cat_code = self.cfg.get("cat", "A")
-            cat_name_map = contest_rules["categories"].get(cat_code, {})
-            if isinstance(cat_name_map, dict):
-                cat_name = cat_name_map.get(self.cfg.get('lang', 'ro'), cat_code)
-            else:
-                cat_name = cat_name_map
-            info_text += f" | {cat_name}"
-        self.inf.config(text=info_text)
-
-    def update_dynamic_controls(self):
-        for widget in self.dynamic_controls_frame.winfo_children():
-            widget.destroy()
-
-        contest_key = self.cfg.get("contest")
-        rules = self.contest_manager.get_rules(contest_key)
-
-        if not rules: return
-
-        if contest_key == "maraton" and "categories" in rules:
-            f = tk.Frame(self.dynamic_controls_frame, bg=self.th["bg"])
-            f.pack(fill="x", pady=5)
-            
-            tk.Label(f, text=lang_manager.t("enter_county"), bg=self.th["bg"], fg=self.th["fg"]).pack(side="left", padx=5)
-            
-            self.county_var = tk.StringVar(value=self.cfg.get("county", "NT"))
-            county_combo = ttk.Combobox(f, textvariable=self.county_var, values=["NT", "IS", "OTHER"], state="readonly", width=5)
-            county_combo.pack(side="left", padx=5)
-            
-            tk.Label(f, text=lang_manager.t("category"), bg=self.th["bg"], fg=self.th["fg"]).pack(side="left", padx=5)
-            
-            self.cat_var = tk.StringVar(value=self.cfg.get("cat", "A"))
+        widths = [150, 70, 70, 50, 5 dicționar, nu pe valoare
             cat_values_text = [v.get(self.cfg.get('lang', 'ro'), k) for k, v in rules["categories"].items()]
             cat_combo = ttk.Combobox(f, textvariable=self.cat_var, values=cat_values_text, state="readonly", width=20)
             cat_combo.pack(side="left", padx=5)
@@ -951,73 +858,7 @@ class RadioLogApp(tk.Tk):
         
         tk.Label(frame_contest, text="Concurs:", bg=self.th["bg"], fg=self.th["fg"]).pack(anchor="w")
         contest_combo = ttk.Combobox(frame_contest, values=self.contest_keys, state="readonly", width=20)
-        contest_combo.set(self.cfg.get("contest"))
-        contest_combo.pack(anchor="w", pady=2)
-        
-        tk.Label(frame_contest, text="Categorie:", bg=self.th["bg"], fg=self.th["fg"]).pack(anchor="w")
-        cat_combo = ttk.Combobox(frame_contest, state="readonly", width=20)
-        cat_combo.pack(anchor="w", pady=2)
-        
-        def update_cat_combo(*args):
-            contest_key = contest_combo.get()
-            rules = self.contest_manager.get_rules(contest_key)
-            if rules and "categories" in rules:
-                cat_values_text = [v.get(self.cfg.get('lang', 'ro'), k) for k, v in rules["categories"].items()]
-                cat_combo['values'] = cat_values_text
-                cat_combo.set(cat_values_text[0])
-        
-        contest_combo.bind("<<ComboboxSelected>>", update_cat_combo)
-        lang.bind("<<ComboboxSelected>>", update_cat_combo) # Also update on lang change
-        update_cat_combo()
-
-        # --- Tab 3: Advanced ---
-        frame_advanced = tk.Frame(notebook, bg=self.th["bg"])
-        notebook.add(frame_advanced, text="Avansat")
-
-        tk.Label(frame_advanced, text="Mod Manual:", font=("Consolas", 10, "bold"), bg=self.th["bg"], fg=self.th["fg"]).pack(pady=5, anchor="w")
-        chk_manual_settings = tk.Checkbutton(frame_advanced, text="Activează setarea manuală a Datei/Orei", 
-                                           variable=self.manual_datetime_var, bg=self.th["bg"], fg=self.th["fg"],
-                                           selectcolor=self.th["eb"], activebackground=self.th["bg"], activeforeground=self.th["fg"])
-        chk_manual_settings.pack(anchor="w")
-
-        def sv():
-            # Retrieve all values before saving
-            new_call = e1.get().upper()
-            new_loc = e2.get().upper()
-            new_jud = e3.get().upper()
-            new_addr = e_addr.get()
-            new_fs = int(e4.get()) if e4.get().isdigit() else self.cfg["fs"]
-            
-            self.cfg.update({
-                "call": new_call,
-                "loc": new_loc,
-                "jud": new_jud,
-                "addr": new_addr,
-                "fs": new_fs,
-                "contest": contest_combo.get(),
-                "lang": lang.get(),
-                "manual_datetime": self.manual_datetime_var.get()
-            })
-            
-            # Update category code
-            contest_key = self.cfg.get("contest")
-            rules = self.contest_manager.get_rules(contest_key)
-            if rules and "categories" in rules:
-                cat_name_ro = cat_combo.get()
-                inv_map = {v.get('ro', k): k for k, v in rules["categories"].items()}
-                self.cfg["cat"] = inv_map.get(cat_name_ro, "A")
-
-            self.lang_var.set(lang.get())
-            lang_manager.set_lang(lang.get())
-            DataManager.atomic_save("config.json", self.cfg)
-            d.destroy()
-            self.apply_settings()
-            messagebox.showinfo("OK", "Setări salvate. Aplicația va fi repornită.")
-            self.on_exit(force_quit=True) # Force restart by quitting and letting launcher restart
-        
-        tk.Button(frame_advanced, text="Salvează și Repornește", command=sv, bg=self.th["ac"], fg="white", font=self.fnt_main).pack(pady=20, anchor="e")
-    
-    def apply_settings(self):
+        contest_combo.set(self.cfg.get("self):
         self.fs = int(self.cfg.get("fs", 12))
         for widget in self.winfo_children():
             widget.destroy()
