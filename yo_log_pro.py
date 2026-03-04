@@ -1,902 +1,1297 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+YO Log PRO v13.0 - Multi-Contest Amateur Radio Logger
+Developed by: Ardei Constantin-Cătălin (YO8ACR)
+Email: yo8acr@gmail.com
+"""
+
 import os
 import sys
 import json
 import datetime
-import shutil
 from pathlib import Path
 from collections import Counter
 import tkinter as tk
 from tkinter import ttk, messagebox, Menu
 
+
+# =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
+
 def resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller"""
     try:
         base_path = sys._MEIPASS
-    except Exception:
+    except AttributeError:
         base_path = os.path.abspath(".")
     return os.path.join(base_path, relative_path)
 
-LANG = {
+
+def get_data_dir():
+    """Get writable data directory"""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.abspath(".")
+
+
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+BANDS = ["160m", "80m", "60m", "40m", "30m", "20m", "17m", "15m", "12m", "10m", "6m", "2m"]
+MODES = ["SSB", "CW", "DIGI", "FT8", "FT4", "RTTY", "AM", "FM"]
+
+TRANSLATIONS = {
     "ro": {
         "app_title": "YO Log PRO v13.0 - Multi-Contest",
-        "call": "Indicativ", "band": "Bandă", "mode": "Mod", "rst_s": "RST S", "rst_r": "RST R", "note": "Notă/Locator",
-        "log": "LOG", "update": "ACTUALIZEAZĂ", "search": "🔍 Caută", "reset": "Reset",
-        "settings": "Setări", "stats": "Statistici", "validate": "Validează", "export": "Export",
-        "delete": "Șterge", "backup": "Backup", "online": "Online", "offline": "Manual",
-        "manual_mode": "Mod Manual (Dată/Oră)", "theme": "Temă", "font_size": "Mărime Font",
-        "contest": "Concurs", "category": "Categorie", "county": "Județ", "operator": "Tip Operator",
-        "address": "Adresă", "required_stations": "Stații Obligatorii", "special_calls": "Indicative Speciale",
-        "points_per_qso": "Puncte/QSO", "edit_contests": "Editează Reguli Concurs",
-        "add_rule": "Adaugă Regulă", "save_changes": "Salvează Modificări", "cancel": "Anulează",
-        "stations_worked": "Stații Lucrate", "total_score": "Scor Total", "diploma_eligible": "Eligibil Diplomă",
-        "validation_result": "Rezultat Validare", "maraton_category_a": "A. Seniori YO (>18 ani)",
-        "maraton_category_b": "B. YL", "maraton_category_c": "C. Juniori YO (<=18 ani)",
-        "maraton_category_d": "D. Club", "maraton_category_e": "E. DX", "maraton_category_f": "F. Receptori",
-        "score_20_pts": "20 pct (YP8IC, YR8TGN)", "score_10_pts": "10 pct (Cluburi Neamț/Iași cu /IC)",
-        "score_5_pts": "5 pct (YO/YL Neamț/Iași cu /IC)", "score_1_pt": "1 pct (Standard)",
-        "enter_county": "Județ (NT/IS pt. punctaj IC):", "county_nt": "Neamț (NT)", "county_is": "Iași (IS)",
-        "stafeta_category_a": "A. Echipe Seniori", "stafeta_category_b": "B. Echipe Juniori",
-        "stafeta_category_c": "C. Echipe Mixte", "yo_dx_category_a": "A. Single-Op High",
-        "yo_dx_category_b": "B. Single-Op Low", "yo_dx_category_c": "C. Multi-Op",
-        "log_simplu_name": "Log Simplu (Cursă de Zi)", "right_click_delete": "Șterge QSO",
-        "right_click_edit": "Editează QSO", "exit_confirm": "Salvați modificările și creați backup?",
-        "yes": "Da", "no": "Nu", "help": "Ajutor", "about": "Despre",
-        "credits_title": "Despre YO Log PRO", "credits_dev": "Dezvoltat de:\nArdei Constantin-Cătălin (YO8ACR)\n\nEmail: yo8acr@gmail.com",
-        "usage_title": "Instrucțiuni de Utilizare",
-        "usage_text": "1. Introduceți Indicativul, Banda și Modul.\n2. Apăsați LOG sau ENTER.\n3. Click Dreapta pentru editare/ștergere.\n4. Validați log-ul înainte de export.\n5. Faceți Backup periodic!",
-        "date_label": "Dată (YYYY-MM-DD):", "time_label": "Oră (HH:MM):",
-        "enable_manual_datetime": "Activează setarea manuală", "led_tooltip_online": "Mod Online: Data/Ora automate",
-        "led_tooltip_offline": "Mod Manual: Data/Ora manuale", "confirm_delete": "Confirmare Ștergere",
-        "confirm_delete_text": "Sigur ștergeți QSO-ul?", "backup_success": "Succes",
-        "backup_success_text": "Backup creat!", "backup_error": "Eroare", "backup_error_text": "Backup eșuat.",
-        "validation_success": "Validare Reușită", "validation_fail": "Validare Eșuată",
-        "export_success": "Export Reușit", "export_error": "Eroare Export",
-        "edit_contest_rules_title": "Editare Reguli", "save_rules": "Salvează",
-        "contest_name": "Nume Concurs", "categories": "Categorii", "required_stations_maraton": "Stații Obligatorii",
-        "min_qso_for_diploma": "Minim QSO diplomă", "counties_for_ic_score": "Județe IC",
-        "special_scoring_maraton": "Punctaj Special", "min_qso_stafeta": "Minim QSO"
+        "call": "Indicativ",
+        "band": "Bandă",
+        "mode": "Mod",
+        "rst_s": "RST S",
+        "rst_r": "RST R",
+        "note": "Notă/Locator",
+        "log": "LOG",
+        "update": "ACTUALIZEAZĂ",
+        "search": "🔍 Caută",
+        "reset": "Reset",
+        "settings": "Setări",
+        "stats": "Statistici",
+        "validate": "Validează",
+        "export": "Export",
+        "delete": "Șterge",
+        "backup": "Backup",
+        "online": "Online",
+        "offline": "Manual",
+        "category": "Categorie",
+        "county": "Județ",
+        "required_stations": "Stații Obligatorii",
+        "stations_worked": "Stații Lucrate",
+        "total_score": "Scor Total",
+        "validation_result": "Rezultat Validare",
+        "date_label": "Dată:",
+        "time_label": "Oră:",
+        "enable_manual": "Manual",
+        "confirm_delete": "Confirmare Ștergere",
+        "confirm_delete_text": "Sigur ștergeți QSO-ul selectat?",
+        "backup_success": "Backup creat cu succes!",
+        "backup_error": "Eroare la backup!",
+        "exit_confirm": "Salvați modificările?",
+        "help": "Ajutor",
+        "about": "Despre",
+        "save": "Salvează",
+        "close": "Închide",
+        "credits": "Dezvoltat de:\nArdei Constantin-Cătălin (YO8ACR)\n\nEmail: yo8acr@gmail.com",
+        "usage": "1. Introduceți Indicativul, Banda și Modul.\n2. Apăsați LOG sau ENTER.\n3. Click Dreapta pentru editare/ștergere.\n4. Validați log-ul înainte de export.\n5. Faceți Backup periodic!",
+        "edit_qso": "Editează QSO",
+        "delete_qso": "Șterge QSO",
+        "data": "Data",
+        "ora": "Ora",
+        "select_format": "Selectează formatul:",
+        "cancel": "Anulează",
+        "export_success": "Export reușit!",
+        "error": "Eroare",
+        "settings_saved": "Setări salvate!",
+        "locator": "Locator:",
+        "address": "Adresă:",
+        "font_size": "Mărime Font:",
+        "station_info": "Info Stație:"
     },
     "en": {
         "app_title": "YO Log PRO v13.0 - Multi-Contest",
-        "call": "Call", "band": "Band", "mode": "Mode", "rst_s": "RST S", "rst_r": "RST R", "note": "Note/Locator",
-        "log": "LOG", "update": "UPDATE", "search": "🔍 Search", "reset": "Reset",
-        "settings": "Settings", "stats": "Stats", "validate": "Validate", "export": "Export",
-        "delete": "Delete", "backup": "Backup", "online": "Online", "offline": "Manual",
-        "manual_mode": "Manual Mode", "theme": "Theme", "font_size": "Font Size",
-        "contest": "Contest", "category": "Category", "county": "County", "operator": "Operator Type",
-        "address": "Address", "required_stations": "Required Stations", "special_calls": "Special Calls",
-        "points_per_qso": "Points/QSO", "edit_contests": "Edit Rules", "add_rule": "Add Rule",
-        "save_changes": "Save", "cancel": "Cancel", "stations_worked": "Stations Worked",
-        "total_score": "Total Score", "diploma_eligible": "Diploma Eligible", "validation_result": "Result",
-        "maraton_category_a": "A. Senior YO (>18)", "maraton_category_b": "B. YL",
-        "maraton_category_c": "C. Junior YO (<=18)", "maraton_category_d": "D. Club",
-        "maraton_category_e": "E. DX", "maraton_category_f": "F. SWL",
-        "score_20_pts": "20 pts", "score_10_pts": "10 pts", "score_5_pts": "5 pts", "score_1_pt": "1 pt",
-        "enter_county": "County:", "county_nt": "NT", "county_is": "IS",
-        "stafeta_category_a": "A. Senior Teams", "stafeta_category_b": "B. Junior Teams",
-        "stafeta_category_c": "C. Mixed Teams", "yo_dx_category_a": "A. Single-Op High",
-        "yo_dx_category_b": "B. Single-Op Low", "yo_dx_category_c": "C. Multi-Op",
-        "log_simplu_name": "Simple Log", "right_click_delete": "Delete", "right_click_edit": "Edit",
-        "exit_confirm": "Save and backup?", "yes": "Yes", "no": "No", "help": "Help", "about": "About",
-        "credits_title": "About", "credits_dev": "Developed by:\nArdei Constantin-Cătălin (YO8ACR)\n\nEmail: yo8acr@gmail.com",
-        "usage_title": "Instructions", "usage_text": "1. Enter Call, Band, Mode.\n2. Press LOG or ENTER.\n3. Right Click to edit/delete.\n4. Validate before export.\n5. Backup regularly!",
-        "date_label": "Date:", "time_label": "Time:", "enable_manual_datetime": "Enable manual",
-        "led_tooltip_online": "Online Mode", "led_tooltip_offline": "Manual Mode",
-        "confirm_delete": "Confirm", "confirm_delete_text": "Delete QSO?",
-        "backup_success": "Success", "backup_success_text": "Backup created!",
-        "backup_error": "Error", "backup_error_text": "Backup failed.",
-        "validation_success": "Valid", "validation_fail": "Invalid",
-        "export_success": "Exported", "export_error": "Export Error",
-        "edit_contest_rules_title": "Edit Rules", "save_rules": "Save",
-        "contest_name": "Contest", "categories": "Categories", "required_stations_maraton": "Required Stations",
-        "min_qso_for_diploma": "Min QSO", "counties_for_ic_score": "Counties IC",
-        "special_scoring_maraton": "Special Scoring", "min_qso_stafeta": "Min QSO"
+        "call": "Callsign",
+        "band": "Band",
+        "mode": "Mode",
+        "rst_s": "RST S",
+        "rst_r": "RST R",
+        "note": "Note/Locator",
+        "log": "LOG",
+        "update": "UPDATE",
+        "search": "🔍 Search",
+        "reset": "Reset",
+        "settings": "Settings",
+        "stats": "Statistics",
+        "validate": "Validate",
+        "export": "Export",
+        "delete": "Delete",
+        "backup": "Backup",
+        "online": "Online",
+        "offline": "Manual",
+        "category": "Category",
+        "county": "County",
+        "required_stations": "Required Stations",
+        "stations_worked": "Stations Worked",
+        "total_score": "Total Score",
+        "validation_result": "Validation Result",
+        "date_label": "Date:",
+        "time_label": "Time:",
+        "enable_manual": "Manual",
+        "confirm_delete": "Confirm Delete",
+        "confirm_delete_text": "Delete selected QSO?",
+        "backup_success": "Backup created!",
+        "backup_error": "Backup error!",
+        "exit_confirm": "Save changes?",
+        "help": "Help",
+        "about": "About",
+        "save": "Save",
+        "close": "Close",
+        "credits": "Developed by:\nArdei Constantin-Cătălin (YO8ACR)\n\nEmail: yo8acr@gmail.com",
+        "usage": "1. Enter Callsign, Band and Mode.\n2. Press LOG or ENTER.\n3. Right Click to edit/delete.\n4. Validate before export.\n5. Backup regularly!",
+        "edit_qso": "Edit QSO",
+        "delete_qso": "Delete QSO",
+        "data": "Date",
+        "ora": "Time",
+        "select_format": "Select format:",
+        "cancel": "Cancel",
+        "export_success": "Export successful!",
+        "error": "Error",
+        "settings_saved": "Settings saved!",
+        "locator": "Locator:",
+        "address": "Address:",
+        "font_size": "Font Size:",
+        "station_info": "Station Info:"
     }
 }
 
-BANDS = ["160m","80m","60m","40m","30m","20m","17m","15m","12m","10m","6m","2m"]
-MODES = ["SSB","CW","DIGI","FT8","FT4","RTTY","AM","FM"]
-
-DEFAULT_CONTEST_RULES = {
+DEFAULT_CONTESTS = {
     "maraton": {
-        "name": {"ro": "Maraton Ion Creangă", "en": "Marathon Ion Creangă"},
-        "categories": {"A": {"ro": "A. Seniori YO (>18 ani)", "en": "A. Senior YO (>18)"}, 
-                      "B": {"ro": "B. YL", "en": "B. YL"}, 
-                      "C": {"ro": "C. Juniori YO (<=18 ani)", "en": "C. Junior YO (<=18)"}, 
-                      "D": {"ro": "D. Club", "en": "D. Club"}, 
-                      "E": {"ro": "E. DX", "en": "E. DX"}, 
-                      "F": {"ro": "F. Receptori", "en": "F. SWL"}},
+        "name_ro": "Maraton Ion Creangă",
+        "name_en": "Marathon Ion Creangă",
+        "categories": ["A. Seniori YO", "B. YL", "C. Juniori YO", "D. Club", "E. DX", "F. Receptori"],
         "required_stations": ["YP8IC", "YR8TGN"],
         "special_scoring": {"YP8IC": 20, "YR8TGN": 20, "YP8KZG": 5, "YO8RRC": 5, "YO8K": 5, "YO8ACR": 5},
-        "counties_for_ic_score": ["NT", "IS"],
-        "min_qso_for_diploma": 100,
-        "scoring_mode": "maraton_special"
+        "counties_for_ic": ["NT", "IS"],
+        "min_qso_diploma": 100,
+        "scoring_mode": "maraton"
     },
     "stafeta": {
-        "name": {"ro": "Cupa Moldovei (Stafeta)", "en": "Moldova Cup (Relay)"},
-        "categories": {"A": {"ro": "A. Echipe Seniori", "en": "A. Senior Teams"}, 
-                      "B": {"ro": "B. Echipe Juniori", "en": "B. Junior Teams"}, 
-                      "C": {"ro": "C. Echipe Mixte", "en": "C. Mixed Teams"}},
-        "scoring_mode": "category_based", "min_qso": 50
+        "name_ro": "Cupa Moldovei (Stafeta)",
+        "name_en": "Moldova Cup (Relay)",
+        "categories": ["A. Echipe Seniori", "B. Echipe Juniori", "C. Echipe Mixte"],
+        "min_qso": 50,
+        "scoring_mode": "standard"
     },
     "yo-dx": {
-        "name": {"ro": "YO-DX-HF", "en": "YO-DX-HF"},
-        "categories": {"A": {"ro": "A. Single-Op High", "en": "A. Single-Op High"}, 
-                      "B": {"ro": "B. Single-Op Low", "en": "B. Single-Op Low"}, 
-                      "C": {"ro": "C. Multi-Op", "en": "C. Multi-Op"}},
-        "scoring_mode": "standard", "exchange_serial": True
+        "name_ro": "YO-DX-HF",
+        "name_en": "YO-DX-HF",
+        "categories": ["A. Single-Op High", "B. Single-Op Low", "C. Multi-Op"],
+        "scoring_mode": "standard"
     },
     "log_simplu": {
-        "name": {"ro": "Log Simplu (Cursă de Zi)", "en": "Simple Log (Day Traffic)"},
-        "categories": {"A": {"ro": "A. Individual", "en": "A. Individual"}},
+        "name_ro": "Log Simplu",
+        "name_en": "Simple Log",
+        "categories": ["A. Individual"],
         "scoring_mode": "none"
     }
 }
 
-class LanguageManager:
-    def __init__(self):
-        self.current = "ro"
-    def t(self, key):
-        return LANG.get(self.current, {}).get(key, key)
-    def set_lang(self, lang):
-        if lang in LANG: 
-            self.current = lang
+DEFAULT_CONFIG = {
+    "call": "YO8ACR",
+    "loc": "KN37",
+    "jud": "NT",
+    "addr": "",
+    "cat": 0,
+    "fs": 12,
+    "contest": "maraton",
+    "county": "NT",
+    "lang": "ro",
+    "manual_datetime": False
+}
 
-lang_manager = LanguageManager()
+THEME = {
+    "bg": "#1E1E1E",
+    "fg": "#E0E0E0",
+    "accent": "#007ACC",
+    "entry_bg": "#2D2D2D",
+    "header_bg": "#252526",
+    "btn_bg": "#3C3C3C",
+    "btn_fg": "#FFFFFF",
+    "led_on": "#4CAF50",
+    "led_off": "#F44336",
+    "warning": "#FF9800",
+    "success": "#4CAF50",
+    "error": "#F44336"
+}
+
+
+# =============================================================================
+# DATA MANAGER
+# =============================================================================
 
 class DataManager:
+    """Handles all data persistence operations"""
+    
     @staticmethod
-    def atomic_save(path, data):
+    def get_file_path(filename):
+        """Get full path to data file"""
+        return os.path.join(get_data_dir(), filename)
+    
+    @staticmethod
+    def save_json(filename, data):
+        """Save data to JSON file with atomic write"""
+        filepath = DataManager.get_file_path(filename)
+        temp_path = filepath + ".tmp"
         try:
-            temp_path = path + ".tmp"
             with open(temp_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
-            if os.path.exists(path):
-                os.remove(path)
-            os.rename(temp_path, path)
+                json.dump(data, f, indent=2, ensure_ascii=False)
+            
+            if os.path.exists(filepath):
+                os.remove(filepath)
+            os.rename(temp_path, filepath)
             return True
         except Exception as e:
-            print(f"Error saving {path}: {e}")
+            print(f"Save error: {e}")
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except:
+                    pass
             return False
     
     @staticmethod
-    def load_data(path, default):
-        full_path = resource_path(path)
-        if not Path(full_path).exists():
-            if isinstance(default, dict):
-                DataManager.atomic_save(full_path, default)
-            return default
+    def load_json(filename, default=None):
+        """Load data from JSON file"""
+        filepath = DataManager.get_file_path(filename)
+        
+        if not os.path.exists(filepath):
+            if default is not None:
+                DataManager.save_json(filename, default)
+            return default if default is not None else {}
+        
         try:
-            with open(full_path, encoding="utf-8") as f: 
+            with open(filepath, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except:
-            return default
+        except Exception as e:
+            print(f"Load error: {e}")
+            return default if default is not None else {}
     
     @staticmethod
     def create_backup(log_data):
+        """Create timestamped backup of log"""
         try:
-            backup_dir = "backups"
+            backup_dir = os.path.join(get_data_dir(), "backups")
             os.makedirs(backup_dir, exist_ok=True)
+            
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = os.path.join(backup_dir, f"log_backup_{timestamp}.json")
-            with open(backup_path, "w", encoding="utf-8") as f:
-                json.dump(log_data, f, indent=2)
+            backup_file = os.path.join(backup_dir, f"log_backup_{timestamp}.json")
+            
+            with open(backup_file, "w", encoding="utf-8") as f:
+                json.dump(log_data, f, indent=2, ensure_ascii=False)
+            
+            # Keep only last 50 backups
+            backups = sorted(Path(backup_dir).glob("log_backup_*.json"))
+            while len(backups) > 50:
+                backups[0].unlink()
+                backups.pop(0)
+            
             return True
-        except:
+        except Exception as e:
+            print(f"Backup error: {e}")
             return False
 
+
+# =============================================================================
+# LANGUAGE MANAGER
+# =============================================================================
+
+class Lang:
+    """Simple language manager"""
+    
+    _current = "ro"
+    
+    @classmethod
+    def set(cls, lang):
+        if lang in TRANSLATIONS:
+            cls._current = lang
+    
+    @classmethod
+    def get(cls):
+        return cls._current
+    
+    @classmethod
+    def t(cls, key):
+        """Get translation for key"""
+        return TRANSLATIONS.get(cls._current, {}).get(key, key)
+
+
+# =============================================================================
+# SCORING ENGINE
+# =============================================================================
+
 class ScoringEngine:
+    """Calculates scores based on contest rules"""
+    
     @staticmethod
-    def calculate_score(qso, contest_rules, user_config):
-        call = qso.get("c", "").upper()
-        scoring_mode = contest_rules.get("scoring_mode", "standard")
+    def calculate_qso_score(call, contest_key, contests, user_county="NT"):
+        """Calculate score for a single QSO"""
+        if contest_key not in contests:
+            return 1
         
-        if scoring_mode == "maraton_special":
-            if call in contest_rules.get("special_scoring", {}):
-                return contest_rules["special_scoring"][call]
+        rules = contests[contest_key]
+        scoring_mode = rules.get("scoring_mode", "standard")
+        
+        if scoring_mode == "maraton":
+            call_upper = call.upper()
             
-            user_county = user_config.get("county", "NT")
-            if "/IC" in call:
-                if user_county in contest_rules.get("counties_for_ic_score", []):
+            # Check special scoring first
+            special = rules.get("special_scoring", {})
+            if call_upper in special:
+                return special[call_upper]
+            
+            # Check /IC suffix for county-based scoring
+            if "/IC" in call_upper:
+                if user_county in rules.get("counties_for_ic", []):
+                    # Check if it's a club station
                     club_prefixes = ["YO8KZG", "YO8RRC", "YO8K", "YO8ACR"]
-                    is_club = any(call.startswith(p) for p in club_prefixes)
-                    return 10 if is_club else 5
+                    for prefix in club_prefixes:
+                        if call_upper.startswith(prefix):
+                            return 10
+                    return 5
+            
             return 1
-        elif scoring_mode == "category_based": 
-            return 1
-        else: 
-            return 1
-
+        
+        return 1
+    
     @staticmethod
-    def validate_log(log_data, contest_rules, user_config):
-        contest_key = contest_rules.get("key") if isinstance(contest_rules, dict) else contest_rules
-        if not contest_key: 
-            return False, "No contest rules found", 0
-
+    def validate_log(log_data, contest_key, contests, user_config):
+        """Validate log against contest rules"""
+        if not log_data:
+            return False, "Log-ul este gol", 0
+        
+        if contest_key not in contests:
+            return True, f"Log valid: {len(log_data)} QSO-uri", len(log_data)
+        
+        rules = contests[contest_key]
+        
+        # Check required stations for Maraton
         if contest_key == "maraton":
-            required = contest_rules.get("required_stations", [])
-            calls = [qso["c"].upper() for qso in log_data]
-            missing = [s for s in required if s not in calls]
+            required = rules.get("required_stations", [])
+            calls_in_log = {qso.get("c", "").upper() for qso in log_data}
+            
+            missing = [s for s in required if s not in calls_in_log]
             if missing:
-                return False, f"Missing required stations: {', '.join(missing)}", 0
+                return False, f"Lipsesc stațiile obligatorii: {', '.join(missing)}", 0
             
-            if len(log_data) < contest_rules.get("min_qso_for_diploma", 100):
-                return False, f"Minimum {contest_rules['min_qso_for_diploma']} QSOs required for diploma, you have {len(log_data)}", 0
-            
-            total_score = sum(ScoringEngine.calculate_score(q, contest_rules, user_config) for q in log_data)
-            return True, f"Valid! Score: {total_score}", total_score
+            min_qso = rules.get("min_qso_diploma", 100)
+            if len(log_data) < min_qso:
+                return False, f"Minim {min_qso} QSO-uri necesare, aveți {len(log_data)}", 0
         
-        elif contest_key == "stafeta":
-            if len(log_data) < contest_rules.get("min_qso", 50):
-                return False, f"Minimum {contest_rules['min_qso']} QSOs required, you have {len(log_data)}", 0
-            return True, f"Valid! {len(log_data)} QSOs", len(log_data)
+        # Check minimum QSOs for Stafeta
+        if contest_key == "stafeta":
+            min_qso = rules.get("min_qso", 50)
+            if len(log_data) < min_qso:
+                return False, f"Minim {min_qso} QSO-uri necesare, aveți {len(log_data)}", 0
         
-        elif contest_key == "yo-dx":
-            if len(log_data) == 0: 
-                return False, "No QSOs", 0
-            return True, f"Valid! {len(log_data)} QSOs", len(log_data)
+        # Calculate total score
+        user_county = user_config.get("county", "NT")
+        total_score = sum(
+            ScoringEngine.calculate_qso_score(qso.get("c", ""), contest_key, contests, user_county)
+            for qso in log_data
+        )
         
-        elif contest_key == "log_simplu":
-            return True, f"Log: {len(log_data)} QSOs", len(log_data)
-        
-        else:
-            return True, f"Log: {len(log_data)} QSOs", len(log_data)
+        return True, f"Log valid! Scor: {total_score}", total_score
 
-class ContestManager:
-    def __init__(self, rules_dict):
-        self.rules = rules_dict
-    
-    def get_rules(self, contest_key):
-        return self.rules.get(contest_key)
-    
-    def get_all_contest_keys(self):
-        return list(self.rules.keys())
-    
-    def update_rules(self, new_rules):
-        self.rules = new_rules
-        DataManager.atomic_save(resource_path("contests.json"), self.rules)
+
+# =============================================================================
+# MAIN APPLICATION
+# =============================================================================
 
 class RadioLogApp(tk.Tk):
+    """Main application class"""
+    
     def __init__(self):
         super().__init__()
         
-        self.title(lang_manager.t("app_title"))
-        self.geometry("1024x700")
-        self.minsize(900, 600)
-        self.center_window(1024, 700)
+        # Load data
+        self.config_data = DataManager.load_json("config.json", DEFAULT_CONFIG.copy())
+        self.log_data = DataManager.load_json("log.json", [])
+        self.contests = DataManager.load_json("contests.json", DEFAULT_CONTESTS.copy())
         
-        self.cfg = DataManager.load_data("config.json", {
-            "call": "YO8ACR", "loc": "KN37", "jud": "NT", "addr": "",
-            "cat": "A", "fs": 12, "contest": "maraton", "theme": "dark",
-            "county": "NT", "lang": "ro", "manual_datetime": False
-        })
+        # Set language
+        Lang.set(self.config_data.get("lang", "ro"))
         
-        self.log = DataManager.load_data("log.json", [])
-        self.idx = None
-        self.fs = int(self.cfg.get("fs", 12))
+        # App state
+        self.edit_index = None
+        self.entries = {}
         
-        self.contest_manager = ContestManager(
-            DataManager.load_data("contests.json", DEFAULT_CONTEST_RULES)
-        )
-        
-        self.themes = {
-            "dark": {
-                "bg": "#212121", "fg": "#E0E0E0", "ac": "#007ACC", "eb": "#3C3C3C", 
-                "hd": "#2D2D2D", "btn": "#444444", "btn_fg": "#FFFFFF", 
-                "led_on": "#4CAF50", "led_off": "#F44336"
-            }
-        }
-        self.current_theme = "dark"
-        self.th = self.themes[self.current_theme]
-        
-        self.configure(bg=self.th["bg"])
-        self.fnt_main = ("Consolas", self.fs)
-        self.fnt_bold = ("Consolas", self.fs, "bold")
-        
+        # Setup window
+        self.setup_window()
+        self.setup_styles()
         self.create_menu()
-        self.ui()
-        self.ref()
-        
-        self.protocol("WM_DELETE_WINDOW", self.on_exit)
-        self.bind('<Return>', self.on_enter_key)
+        self.create_ui()
         self.create_context_menu()
-
-    def center_window(self, width, height):
-        screen_width = self.winfo_screenwidth()
-        screen_height = self.winfo_screenheight()
-        x = (screen_width // 2) - (width // 2)
-        y = (screen_height // 2) - (height // 2)
-        self.geometry(f'{width}x{height}+{x}+{y}')
-
+        self.refresh_log()
+        
+        # Bindings
+        self.protocol("WM_DELETE_WINDOW", self.on_exit)
+        self.bind('<Return>', self.on_enter_pressed)
+    
+    def setup_window(self):
+        """Configure main window"""
+        self.title(Lang.t("app_title"))
+        self.configure(bg=THEME["bg"])
+        
+        # Window size and position
+        width, height = 1100, 720
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        x = (screen_w - width) // 2
+        y = (screen_h - height) // 2
+        
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        self.minsize(900, 600)
+    
+    def setup_styles(self):
+        """Configure ttk styles"""
+        self.font_size = int(self.config_data.get("fs", 12))
+        self.font_main = ("Consolas", self.font_size)
+        self.font_bold = ("Consolas", self.font_size, "bold")
+        
+        style = ttk.Style()
+        style.theme_use('clam')
+        
+        style.configure("Treeview",
+                       background=THEME["entry_bg"],
+                       foreground=THEME["fg"],
+                       fieldbackground=THEME["entry_bg"],
+                       font=self.font_main)
+        
+        style.configure("Treeview.Heading",
+                       background=THEME["header_bg"],
+                       foreground=THEME["fg"],
+                       font=self.font_bold)
+        
+        style.map("Treeview", background=[("selected", THEME["accent"])])
+    
     def create_menu(self):
+        """Create menu bar"""
         menubar = tk.Menu(self)
         self.config(menu=menubar)
+        
         help_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label=lang_manager.t("help"), menu=help_menu)
-        help_menu.add_command(label=lang_manager.t("about"), command=self.show_about)
+        menubar.add_cascade(label=Lang.t("help"), menu=help_menu)
+        help_menu.add_command(label=Lang.t("about"), command=self.show_about)
         help_menu.add_separator()
         help_menu.add_command(label="Exit", command=self.on_exit)
-
-    def show_about(self):
-        about_win = tk.Toplevel(self)
-        about_win.title(lang_manager.t("about"))
-        about_win.geometry("500x350")
-        about_win.resizable(False, False)
-        about_win.configure(bg=self.th["bg"])
-        
-        nb = ttk.Notebook(about_win)
-        nb.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        frame_credits = tk.Frame(nb, bg=self.th["bg"])
-        nb.add(frame_credits, text="Credits")
-        
-        lbl_dev = tk.Label(frame_credits, text=lang_manager.t("credits_dev"), 
-                           bg=self.th["bg"], fg=self.th["fg"], justify="left", font=("Consolas", 10))
-        lbl_dev.pack(pady=20, padx=20)
-        
-        frame_usage = tk.Frame(nb, bg=self.th["bg"])
-        nb.add(frame_usage, text="Utilizare")
-        
-        lbl_usage_title = tk.Label(frame_usage, text=lang_manager.t("usage_title"), 
-                                  bg=self.th["bg"], fg=self.th["ac"], font=("Consolas", 12, "bold"))
-        lbl_usage_title.pack(pady=10)
-        
-        lbl_usage_text = tk.Label(frame_usage, text=lang_manager.t("usage_text"), 
-                                 bg=self.th["bg"], fg=self.th["fg"], justify="left", font=("Consolas", 10))
-        lbl_usage_text.pack(pady=10, padx=20)
-        
-        btn_close = tk.Button(about_win, text="Închide", command=about_win.destroy, 
-                             bg=self.th["ac"], fg="white", width=15)
-        btn_close.pack(pady=10)
-
+    
     def create_context_menu(self):
-        self.context_menu = Menu(self, tearoff=0)
-        self.context_menu.add_command(label=lang_manager.t("right_click_edit"), command=self.edit_from_context)
-        self.context_menu.add_separator()
-        self.context_menu.add_command(label=lang_manager.t("right_click_delete"), command=self.delete_from_context)
-
-    def on_enter_key(self, event):
-        widget = self.focus_get()
-        if isinstance(widget, tk.Entry):
-            self.do_l()
-            return "break"
-
-    def show_context_menu(self, event):
-        self.context_menu.post(event.x_root, event.y_root)
-
-    def edit_from_context(self):
-        self.ed(None)
-
-    def delete_from_context(self):
-        self.dl()
-
-    def ui(self):
-        h = tk.Frame(self, bg=self.th["hd"], pady=5)
-        h.pack(fill="x")
+        """Create right-click context menu"""
+        self.ctx_menu = Menu(self, tearoff=0)
+        self.ctx_menu.add_command(label=Lang.t("edit_qso"), command=self.edit_selected)
+        self.ctx_menu.add_separator()
+        self.ctx_menu.add_command(label=Lang.t("delete_qso"), command=self.delete_selected)
+    
+    def create_ui(self):
+        """Create all UI elements"""
+        self.create_header()
+        self.create_input_area()
+        self.create_log_view()
+        self.create_button_bar()
+    
+    def create_header(self):
+        """Create header with status and controls"""
+        header = tk.Frame(self, bg=THEME["header_bg"], pady=8)
+        header.pack(fill="x")
         
-        status_frame = tk.Frame(h, bg=self.th["hd"])
-        status_frame.pack(side="left", padx=10)
-
-        self.led_canvas = tk.Canvas(status_frame, width=20, height=20, bg=self.th["hd"], highlightthickness=0)
-        self.led = self.led_canvas.create_oval(2, 2, 18, 18, fill=self.th["led_on"], outline="")
-        self.led_canvas.pack(side="left", padx=5)
-        self.led_status_label = tk.Label(status_frame, text=lang_manager.t("online"), 
-                                         bg=self.th["hd"], fg=self.th["led_on"], font=self.fnt_main)
-        self.led_status_label.pack(side="left")
+        # Left side - Status
+        left_frame = tk.Frame(header, bg=THEME["header_bg"])
+        left_frame.pack(side="left", padx=15)
         
-        self.inf = tk.Label(status_frame, text="", fg=self.th["fg"], bg=self.th["hd"])
-        self.inf.pack(side="left", padx=20)
+        # LED indicator
+        self.led_canvas = tk.Canvas(left_frame, width=18, height=18, 
+                                    bg=THEME["header_bg"], highlightthickness=0)
+        self.led = self.led_canvas.create_oval(2, 2, 16, 16, 
+                                               fill=THEME["led_on"], outline="")
+        self.led_canvas.pack(side="left", padx=(0, 8))
+        
+        self.status_label = tk.Label(left_frame, text=Lang.t("online"),
+                                     bg=THEME["header_bg"], fg=THEME["led_on"],
+                                     font=self.font_main)
+        self.status_label.pack(side="left")
+        
+        # Info bar
+        self.info_label = tk.Label(left_frame, text="", bg=THEME["header_bg"],
+                                   fg=THEME["fg"], font=self.font_main)
+        self.info_label.pack(side="left", padx=20)
         self.update_info_bar()
-
-        controls_frame = tk.Frame(h, bg=self.th["hd"])
-        controls_frame.pack(side="right", padx=10)
-
-        self.lang_var = tk.StringVar(value=self.cfg.get("lang", "ro"))
-        self.lang_menu = ttk.Combobox(controls_frame, textvariable=self.lang_var, values=["ro", "en"], state="readonly", width=5)
-        self.lang_menu.bind("<<ComboboxSelected>>", self.change_lang)
-        self.lang_menu.pack(side="left", padx=5)
         
-        self.contest_keys = self.contest_manager.get_all_contest_keys()
-        self.cb = ttk.Combobox(controls_frame, values=self.contest_keys, state="readonly", width=15)
-        self.cb.set(self.cfg.get("contest"))
-        self.cb.bind("<<ComboboxSelected>>", self.change_contest)
-        self.cb.pack(side="left", padx=5)
+        # Right side - Controls
+        right_frame = tk.Frame(header, bg=THEME["header_bg"])
+        right_frame.pack(side="right", padx=15)
         
-        f = tk.Frame(self, bg=self.th["bg"], pady=10)
-        f.pack(fill="x", padx=10)
+        # Language selector
+        self.lang_var = tk.StringVar(value=self.config_data.get("lang", "ro"))
+        lang_combo = ttk.Combobox(right_frame, textvariable=self.lang_var,
+                                  values=["ro", "en"], state="readonly", width=5)
+        lang_combo.pack(side="left", padx=5)
+        lang_combo.bind("<<ComboboxSelected>>", self.on_language_change)
         
-        self.en = {}
+        # Contest selector
+        contest_names = list(self.contests.keys())
+        self.contest_var = tk.StringVar(value=self.config_data.get("contest", "maraton"))
+        contest_combo = ttk.Combobox(right_frame, textvariable=self.contest_var,
+                                     values=contest_names, state="readonly", width=15)
+        contest_combo.pack(side="left", padx=5)
+        contest_combo.bind("<<ComboboxSelected>>", self.on_contest_change)
+    
+    def create_input_area(self):
+        """Create input fields area"""
+        input_frame = tk.Frame(self, bg=THEME["bg"], pady=15)
+        input_frame.pack(fill="x", padx=15)
         
-        px_call = tk.Frame(f, bg=self.th["bg"])
-        px_call.grid(row=0, column=0, padx=5)
-        tk.Label(px_call, text=lang_manager.t("call"), fg=self.th["fg"], bg=self.th["bg"], font=self.fnt_bold).pack()
-        e_call = tk.Entry(px_call, width=25, bg=self.th["eb"], fg=self.th["fg"], 
-                         insertbackground=self.th["fg"], font=self.fnt_bold, justify="center")
-        e_call.pack(ipady=4)
-        self.en["c"] = e_call
+        # Row 1: Main input fields
+        row1 = tk.Frame(input_frame, bg=THEME["bg"])
+        row1.pack(fill="x")
         
-        fields_def = [
-            (lang_manager.t("band"), "b", 8), (lang_manager.t("mode"), "m", 8),
-            (lang_manager.t("rst_s"), "s", 6), (lang_manager.t("rst_r"), "r", 6),
-            (lang_manager.t("note"), "n", 15)
+        # Callsign (larger)
+        call_frame = tk.Frame(row1, bg=THEME["bg"])
+        call_frame.pack(side="left", padx=5)
+        tk.Label(call_frame, text=Lang.t("call"), bg=THEME["bg"], 
+                fg=THEME["fg"], font=self.font_bold).pack()
+        self.entries["call"] = tk.Entry(call_frame, width=20, bg=THEME["entry_bg"],
+                                        fg=THEME["fg"], font=self.font_bold,
+                                        insertbackground=THEME["fg"], justify="center")
+        self.entries["call"].pack(ipady=5)
+        
+        # Other fields
+        fields = [
+            ("band", Lang.t("band"), 8, BANDS, "40m"),
+            ("mode", Lang.t("mode"), 8, MODES, "SSB"),
+            ("rst_s", Lang.t("rst_s"), 6, None, "59"),
+            ("rst_r", Lang.t("rst_r"), 6, None, "59"),
+            ("note", Lang.t("note"), 15, None, ""),
         ]
         
-        for i, (l, k, w) in enumerate(fields_def):
-            px = tk.Frame(f, bg=self.th["bg"])
-            px.grid(row=0, column=i+1, padx=5)
-            tk.Label(px, text=l, fg=self.th["fg"], bg=self.th["bg"]).pack()
+        for key, label, width, values, default in fields:
+            frame = tk.Frame(row1, bg=THEME["bg"])
+            frame.pack(side="left", padx=5)
+            tk.Label(frame, text=label, bg=THEME["bg"], 
+                    fg=THEME["fg"], font=self.font_main).pack()
             
-            if k == "b":
-                e = ttk.Combobox(px, values=BANDS, width=w, state="readonly", font=self.fnt_main)
-                e.set("40m")
-            elif k == "m":
-                e = ttk.Combobox(px, values=MODES, width=w, state="readonly", font=self.fnt_main)
-                e.set("SSB")
+            if values:
+                entry = ttk.Combobox(frame, values=values, width=width,
+                                    state="readonly", font=self.font_main)
+                entry.set(default)
             else:
-                e = tk.Entry(px, width=w, bg=self.th["eb"], fg=self.th["fg"], 
-                         insertbackground=self.th["fg"], font=self.fnt_main, justify="center")
-                if k in ["s", "r"]: 
-                    e.insert(0, "59")
+                entry = tk.Entry(frame, width=width, bg=THEME["entry_bg"],
+                               fg=THEME["fg"], font=self.font_main,
+                               insertbackground=THEME["fg"], justify="center")
+                if default:
+                    entry.insert(0, default)
             
-            e.pack()
-            self.en[k] = e
-
-        self.manual_datetime_var = tk.BooleanVar(value=self.cfg.get("manual_datetime", False))
-        frame_dt = tk.Frame(f, bg=self.th["bg"])
-        frame_dt.grid(row=0, column=len(fields_def)+1, padx=10)
+            entry.pack()
+            self.entries[key] = entry
         
-        tk.Label(frame_dt, text=lang_manager.t("enable_manual_datetime"), fg=self.th["fg"], bg=self.th["bg"]).pack()
-        chk_manual = tk.Checkbutton(frame_dt, text="Manual", variable=self.manual_datetime_var, 
-                                   command=self.toggle_datetime_editable, bg=self.th["bg"], fg=self.th["fg"],
-                                   selectcolor=self.th["eb"], activebackground=self.th["bg"], activeforeground=self.th["fg"])
-        chk_manual.pack()
+        # Manual datetime checkbox
+        dt_frame = tk.Frame(row1, bg=THEME["bg"])
+        dt_frame.pack(side="left", padx=15)
         
-        self.dt_frame_inputs = tk.Frame(f, bg=self.th["bg"])
-        self.dt_frame_inputs.grid(row=1, column=0, columnspan=10, pady=5)
+        self.manual_dt_var = tk.BooleanVar(value=self.config_data.get("manual_datetime", False))
+        chk = tk.Checkbutton(dt_frame, text=Lang.t("enable_manual"),
+                            variable=self.manual_dt_var, bg=THEME["bg"],
+                            fg=THEME["fg"], selectcolor=THEME["entry_bg"],
+                            activebackground=THEME["bg"], command=self.toggle_manual_datetime)
+        chk.pack()
         
-        tk.Label(self.dt_frame_inputs, text=lang_manager.t("date_label"), fg=self.th["fg"], bg=self.th["bg"]).grid(row=0, column=0, padx=5)
-        self.en["d_manual"] = tk.Entry(self.dt_frame_inputs, width=12, bg=self.th["eb"], fg=self.th["fg"], font=self.fnt_main, state="disabled", justify="center")
-        self.en["d_manual"].grid(row=0, column=1, padx=5)
-        self.en["d_manual"].insert(0, datetime.datetime.now().strftime("%Y-%m-%d"))
+        # Action buttons
+        btn_frame = tk.Frame(row1, bg=THEME["bg"])
+        btn_frame.pack(side="left", padx=10)
         
-        tk.Label(self.dt_frame_inputs, text=lang_manager.t("time_label"), fg=self.th["fg"], bg=self.th["bg"]).grid(row=0, column=2, padx=5)
-        self.en["t_manual"] = tk.Entry(self.dt_frame_inputs, width=12, bg=self.th["eb"], fg=self.th["fg"], font=self.fnt_main, state="disabled", justify="center")
-        self.en["t_manual"].grid(row=0, column=3, padx=5)
-        self.en["t_manual"].insert(0, datetime.datetime.now().strftime("%H:%M"))
+        self.log_btn = tk.Button(btn_frame, text=Lang.t("log"), command=self.add_qso,
+                                bg=THEME["accent"], fg="white", font=self.font_bold,
+                                width=12, height=2, cursor="hand2")
+        self.log_btn.pack(pady=2)
         
-        btn_frame = tk.Frame(f, bg=self.th["bg"])
-        btn_frame.grid(row=0, column=len(fields_def)+2, padx=5)
+        tk.Button(btn_frame, text=Lang.t("reset"), command=self.clear_inputs,
+                 bg=THEME["btn_bg"], fg=THEME["btn_fg"], font=self.font_main,
+                 width=12, cursor="hand2").pack(pady=2)
         
-        self.bl = tk.Button(btn_frame, text=lang_manager.t("log"), command=self.do_l, bg=self.th["ac"], fg="white", width=10, font=self.fnt_bold, height=2)
-        self.bl.pack(pady=5)
+        # Row 2: Manual date/time inputs
+        row2 = tk.Frame(input_frame, bg=THEME["bg"])
+        row2.pack(fill="x", pady=(10, 0))
         
-        self.reset_btn = tk.Button(btn_frame, text=lang_manager.t("reset"), command=self.clr, bg=self.th["btn"], fg=self.th["btn_fg"], width=10, font=self.fnt_main)
-        self.reset_btn.pack(pady=5)
-
-        self.dynamic_controls_frame = tk.Frame(f, bg=self.th["bg"])
-        self.dynamic_controls_frame.grid(row=2, column=0, columnspan=10, pady=5)
-        self.update_dynamic_controls()
+        tk.Label(row2, text=Lang.t("date_label"), bg=THEME["bg"],
+                fg=THEME["fg"], font=self.font_main).pack(side="left", padx=5)
         
-        t_f = tk.Frame(self)
-        t_f.pack(fill="both", expand=True, padx=10, pady=5)
+        self.entries["date"] = tk.Entry(row2, width=12, bg=THEME["entry_bg"],
+                                       fg=THEME["fg"], font=self.font_main,
+                                       justify="center", state="disabled")
+        self.entries["date"].pack(side="left", padx=5)
         
-        cols = [lang_manager.t("call"), lang_manager.t("band"), lang_manager.t("mode"), 
-                lang_manager.t("rst_s"), lang_manager.t("rst_r"), lang_manager.t("note"), "Data", "Ora"]
+        tk.Label(row2, text=Lang.t("time_label"), bg=THEME["bg"],
+                fg=THEME["fg"], font=self.font_main).pack(side="left", padx=5)
         
-        self.tr = ttk.Treeview(t_f, columns=(1,2,3,4,5,6,7,8), show="headings", selectmode="browse")
+        self.entries["time"] = tk.Entry(row2, width=10, bg=THEME["entry_bg"],
+                                       fg=THEME["fg"], font=self.font_main,
+                                       justify="center", state="disabled")
+        self.entries["time"].pack(side="left", padx=5)
         
-        widths = [150, 70, 70, 50, 50, 150, 100, 80]
-        for i, (col, w) in enumerate(zip(cols, widths), 1):
-            self.tr.heading(i, text=col)
-            self.tr.column(i, width=w, anchor="center")
+        # Initialize date/time
+        now = datetime.datetime.now()
+        self.entries["date"].config(state="normal")
+        self.entries["date"].insert(0, now.strftime("%Y-%m-%d"))
+        self.entries["date"].config(state="disabled")
         
-        self.tr.pack(side="left", fill="both", expand=True)
+        self.entries["time"].config(state="normal")
+        self.entries["time"].insert(0, now.strftime("%H:%M"))
+        self.entries["time"].config(state="disabled")
         
-        sb = ttk.Scrollbar(t_f, orient="vertical", command=self.tr.yview)
-        sb.pack(side="right", fill="y")
-        self.tr.configure(yscrollcommand=sb.set)
+        # Row 3: Contest-specific controls
+        self.contest_controls = tk.Frame(input_frame, bg=THEME["bg"])
+        self.contest_controls.pack(fill="x", pady=(10, 0))
+        self.update_contest_controls()
+    
+    def create_log_view(self):
+        """Create log treeview"""
+        tree_frame = tk.Frame(self, bg=THEME["bg"])
+        tree_frame.pack(fill="both", expand=True, padx=15, pady=5)
         
-        self.tr.bind("<Double-1>", self.ed)
-        self.tr.bind("<Button-3>", self.show_context_menu)
+        # Columns
+        columns = ("call", "band", "mode", "rst_s", "rst_r", "note", "date", "time")
+        headers = [Lang.t("call"), Lang.t("band"), Lang.t("mode"),
+                  Lang.t("rst_s"), Lang.t("rst_r"), Lang.t("note"),
+                  Lang.t("data"), Lang.t("ora")]
+        widths = [150, 70, 70, 60, 60, 180, 100, 80]
         
-        b_f = tk.Frame(self, bg=self.th["bg"], pady=10)
-        b_f.pack(fill="x", padx=10)
+        self.tree = ttk.Treeview(tree_frame, columns=columns, show="headings",
+                                selectmode="browse")
+        
+        for col, header, width in zip(columns, headers, widths):
+            self.tree.heading(col, text=header)
+            self.tree.column(col, width=width, anchor="center")
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        
+        self.tree.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Bindings
+        self.tree.bind("<Double-1>", self.on_tree_double_click)
+        self.tree.bind("<Button-3>", self.on_tree_right_click)
+    
+    def create_button_bar(self):
+        """Create bottom button bar"""
+        btn_bar = tk.Frame(self, bg=THEME["bg"], pady=10)
+        btn_bar.pack(fill="x", padx=15)
         
         buttons = [
-            (lang_manager.t("settings"), self.set, "#FF9800"),
-            (lang_manager.t("stats"), self.st, "#2196F3"),
-            (lang_manager.t("validate"), self.validate, "#4CAF50"),
-            (lang_manager.t("export"), self.export_menu, "#9C27B0"),
-            (lang_manager.t("delete"), self.dl, "#F44336"),
-            (lang_manager.t("backup"), self.manual_backup, "#607D8B")
+            (Lang.t("settings"), self.show_settings, THEME["warning"]),
+            (Lang.t("stats"), self.show_stats, "#2196F3"),
+            (Lang.t("validate"), self.validate_log, THEME["success"]),
+            (Lang.t("export"), self.show_export, "#9C27B0"),
+            (Lang.t("delete"), self.delete_selected, THEME["error"]),
+            (Lang.t("backup"), self.create_backup, "#607D8B"),
         ]
         
-        for txt, cmd, col in buttons:
-            tk.Button(b_f, text=txt, command=cmd, bg=col, fg="white", width=15, font=self.fnt_main).pack(side="left", padx=5)
-
-    def toggle_datetime_editable(self):
-        is_manual = self.manual_datetime_var.get()
-        state = "normal" if is_manual else "disabled"
-        self.en["d_manual"].config(state=state)
-        self.en["t_manual"].config(state=state)
+        for text, command, color in buttons:
+            tk.Button(btn_bar, text=text, command=command, bg=color, fg="white",
+                     font=self.font_main, width=14, cursor="hand2").pack(side="left", padx=5)
+    
+    # =========================================================================
+    # UI UPDATE METHODS
+    # =========================================================================
+    
+    def update_info_bar(self):
+        """Update the info bar text"""
+        call = self.config_data.get("call", "NOCALL")
+        contest_key = self.config_data.get("contest", "maraton")
         
-        led_color = self.th["led_off"] if is_manual else self.th["led_on"]
-        led_text = lang_manager.t("offline") if is_manual else lang_manager.t("online")
+        # Get contest name safely
+        contest = self.contests.get(contest_key, {})
+        lang_key = "name_" + Lang.get()
+        contest_name = contest.get(lang_key, contest.get("name_ro", contest_key))
+        
+        # Get category safely
+        cat_idx = self.config_data.get("cat", 0)
+        categories = contest.get("categories", ["A"])
+        if isinstance(cat_idx, int) and 0 <= cat_idx < len(categories):
+            category = categories[cat_idx]
+        else:
+            category = categories[0] if categories else "A"
+        
+        qso_count = len(self.log_data)
+        
+        info_text = f"{call} | {contest_name} | {category} | QSO: {qso_count}"
+        self.info_label.config(text=info_text)
+    
+    def update_contest_controls(self):
+        """Update contest-specific controls"""
+        for widget in self.contest_controls.winfo_children():
+            widget.destroy()
+        
+        contest_key = self.config_data.get("contest", "maraton")
+        contest = self.contests.get(contest_key, {})
+        
+        if not contest:
+            return
+        
+        # Category selector
+        tk.Label(self.contest_controls, text=Lang.t("category"),
+                bg=THEME["bg"], fg=THEME["fg"], font=self.font_main).pack(side="left", padx=5)
+        
+        categories = contest.get("categories", ["A"])
+        self.cat_var = tk.StringVar()
+        
+        cat_idx = self.config_data.get("cat", 0)
+        if isinstance(cat_idx, int) and 0 <= cat_idx < len(categories):
+            self.cat_var.set(categories[cat_idx])
+        else:
+            self.cat_var.set(categories[0] if categories else "A")
+        
+        cat_combo = ttk.Combobox(self.contest_controls, textvariable=self.cat_var,
+                                values=categories, state="readonly", width=20)
+        cat_combo.pack(side="left", padx=5)
+        
+        # County selector for Maraton
+        if contest_key == "maraton":
+            tk.Label(self.contest_controls, text=Lang.t("county"),
+                    bg=THEME["bg"], fg=THEME["fg"], font=self.font_main).pack(side="left", padx=(20, 5))
+            
+            self.county_var = tk.StringVar(value=self.config_data.get("county", "NT"))
+            county_combo = ttk.Combobox(self.contest_controls, textvariable=self.county_var,
+                                       values=["NT", "IS"], state="readonly", width=8)
+            county_combo.pack(side="left", padx=5)
+        
+        # Save button
+        tk.Button(self.contest_controls, text="💾 " + Lang.t("save"),
+                 command=self.save_contest_settings, bg=THEME["accent"],
+                 fg="white", font=self.font_main, cursor="hand2").pack(side="left", padx=10)
+    
+    def toggle_manual_datetime(self):
+        """Toggle manual date/time entry"""
+        is_manual = self.manual_dt_var.get()
+        state = "normal" if is_manual else "disabled"
+        
+        self.entries["date"].config(state=state)
+        self.entries["time"].config(state=state)
+        
+        # Update LED
+        led_color = THEME["led_off"] if is_manual else THEME["led_on"]
+        status_text = Lang.t("offline") if is_manual else Lang.t("online")
         
         self.led_canvas.itemconfig(self.led, fill=led_color)
-        self.led_status_label.config(text=led_text, fg=led_color)
+        self.status_label.config(text=status_text, fg=led_color)
         
-        self.cfg["manual_datetime"] = is_manual
-        DataManager.atomic_save("config.json", self.cfg)
-
-    def update_info_bar(self):
-        contest_key = self.cfg.get("contest", "maraton")
-        rules = self.contest_manager.get_rules(contest_key)
-        contest_name = rules.get("name", {}).get(self.cfg.get("lang", "ro"), contest_key) if rules else contest_key
+        self.config_data["manual_datetime"] = is_manual
+        DataManager.save_json("config.json", self.config_data)
+    
+    def refresh_log(self):
+        """Refresh the log treeview"""
+        # Clear existing items
+        for item in self.tree.get_children():
+            self.tree.delete(item)
         
-        cat_key = self.cfg.get("cat", "A")
-        cat_name = rules.get("categories", {}).get(cat_key, {}).get(self.cfg.get("lang", "ro"), cat_key) if rules else cat_key
+        contest_key = self.config_data.get("contest", "maraton")
+        user_county = self.config_data.get("county", "NT")
         
-        info_text = f"{self.cfg['call']} | {contest_name} | {cat_name} | QSO: {len(self.log)}"
-        self.inf.config(text=info_text)
-
-    def update_dynamic_controls(self):
-        for widget in self.dynamic_controls_frame.winfo_children():
-            widget.destroy()
+        # Add items
+        for i, qso in enumerate(self.log_data):
+            call = qso.get("c", "")
+            band = qso.get("b", "")
+            mode = qso.get("m", "")
+            rst_s = qso.get("s", "59")
+            rst_r = qso.get("r", "59")
+            note = qso.get("n", "")
+            date = qso.get("d", "")
+            time = qso.get("t", "")
+            
+            # Add score to note for Maraton
+            if contest_key == "maraton":
+                score = ScoringEngine.calculate_qso_score(call, contest_key, 
+                                                          self.contests, user_county)
+                note = f"{note} ({score}p)" if note else f"({score}p)"
+            
+            self.tree.insert("", "end", iid=str(i),
+                           values=(call, band, mode, rst_s, rst_r, note, date, time))
         
-        contest_key = self.cfg.get("contest")
-        rules = self.contest_manager.get_rules(contest_key)
+        self.update_info_bar()
+    
+    # =========================================================================
+    # QSO OPERATIONS
+    # =========================================================================
+    
+    def get_datetime(self):
+        """Get current date and time"""
+        if self.manual_dt_var.get():
+            date_str = self.entries["date"].get().strip()
+            time_str = self.entries["time"].get().strip()
+            
+            # Validate format
+            try:
+                datetime.datetime.strptime(date_str, "%Y-%m-%d")
+                datetime.datetime.strptime(time_str, "%H:%M")
+                return date_str, time_str
+            except ValueError:
+                messagebox.showerror(Lang.t("error"), 
+                                    "Format invalid! Use YYYY-MM-DD and HH:MM")
+                now = datetime.datetime.utcnow()
+                return now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
+        else:
+            now = datetime.datetime.utcnow()
+            return now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
+    
+    def add_qso(self):
+        """Add or update QSO"""
+        call = self.entries["call"].get().upper().strip()
         
-        if not rules:
+        if not call:
+            self.entries["call"].focus()
             return
         
-        if contest_key == "maraton":
-            f = self.dynamic_controls_frame
-            tk.Label(f, text=lang_manager.t("category"), bg=self.th["bg"], fg=self.th["fg"]).pack(side="left", padx=5)
-            
-            self.cat_var = tk.StringVar()
-            current_cat = self.cfg.get("cat", "A")
-            cat_display = rules["categories"].get(current_cat, {}).get(self.cfg.get('lang', 'ro'), current_cat)
-            self.cat_var.set(cat_display)
-            
-            cat_values_text = [v.get(self.cfg.get('lang', 'ro'), k) for k, v in rules["categories"].items()]
-            cat_combo = ttk.Combobox(f, textvariable=self.cat_var, values=cat_values_text, state="readonly", width=25)
-            cat_combo.pack(side="left", padx=5)
-            
-            tk.Label(f, text=lang_manager.t("enter_county"), bg=self.th["bg"], fg=self.th["fg"]).pack(side="left", padx=5)
-            self.county_var = tk.StringVar(value=self.cfg.get("county", "NT"))
-            county_combo = ttk.Combobox(f, textvariable=self.county_var, values=["NT", "IS"], state="readonly", width=10)
-            county_combo.pack(side="left", padx=5)
-            
-            def save_maraton_settings():
-                selected_text = self.cat_var.get()
-                cat_code = "A"
-                for k, v in rules["categories"].items():
-                    if v.get(self.cfg.get('lang', 'ro')) == selected_text:
-                        cat_code = k
-                        break
-                
-                self.cfg["county"] = self.county_var.get()
-                self.cfg["cat"] = cat_code
-                DataManager.atomic_save("config.json", self.cfg)
-                self.update_info_bar()
-                messagebox.showinfo("OK", "Setări actualizate")
-            
-            tk.Button(f, text="💾", command=save_maraton_settings, bg=self.th["ac"], fg="white").pack(side="left", padx=5)
-
-    def change_lang(self, event):
-        lang = self.lang_var.get()
-        lang_manager.set_lang(lang)
-        self.cfg['lang'] = lang
-        DataManager.atomic_save("config.json", self.cfg)
-        for widget in self.winfo_children():
-            widget.destroy()
-        self.ui()
-        self.ref()
-
-    def change_contest(self, event):
-        contest_key = self.cb.get()
-        self.cfg["contest"] = contest_key
-        DataManager.atomic_save("config.json", self.cfg)
-        for widget in self.winfo_children():
-            widget.destroy()
-        self.ui()
-        self.ref()
-
-    def do_l(self):
-        c = self.en["c"].get().upper().strip()
-        if not c:
-            self.en["c"].focus()
-            return
+        date_str, time_str = self.get_datetime()
         
-        d, t = self.get_current_datetime()
-        
-        q = {
-            "d": d, "t": t, "c": c, "b": self.en["b"].get(), "m": self.en["m"].get(),
-            "s": self.en["s"].get(), "r": self.en["r"].get(), "n": self.en["n"].get()
+        qso = {
+            "c": call,
+            "b": self.entries["band"].get(),
+            "m": self.entries["mode"].get(),
+            "s": self.entries["rst_s"].get() or "59",
+            "r": self.entries["rst_r"].get() or "59",
+            "n": self.entries["note"].get(),
+            "d": date_str,
+            "t": time_str
         }
         
-        if self.idx is not None:
-            self.log[self.idx] = q
-            self.idx = None
-            self.bl.config(text=lang_manager.t("log"), bg=self.th["ac"])
+        if self.edit_index is not None:
+            # Update existing QSO
+            self.log_data[self.edit_index] = qso
+            self.edit_index = None
+            self.log_btn.config(text=Lang.t("log"), bg=THEME["accent"])
         else:
-            self.log.insert(0, q)
+            # Add new QSO at beginning
+            self.log_data.insert(0, qso)
         
-        self.ref()
-        self.clr()
-        DataManager.atomic_save("log.json", self.log)
-        DataManager.create_backup(self.log)
+        self.clear_inputs()
+        self.refresh_log()
+        DataManager.save_json("log.json", self.log_data)
     
-    def get_current_datetime(self):
-        if self.manual_datetime_var.get():
-            d = self.en["d_manual"].get()
-            t = self.en["t_manual"].get()
-            try:
-                datetime.datetime.strptime(d, "%Y-%m-%d")
-                datetime.datetime.strptime(t, "%H:%M")
-            except ValueError:
-                messagebox.showerror("Eroare", "Format invalid. Folosiți YYYY-MM-DD și HH:MM")
-                return datetime.datetime.now().strftime("%Y-%m-%d"), datetime.datetime.now().strftime("%H:%M")
-            return d, t
-        else:
-            n = datetime.datetime.utcnow()
-            return n.strftime("%Y-%m-%d"), n.strftime("%H:%M")
-
-    def ref(self):
-        for i in self.tr.get_children():
-            self.tr.delete(i)
+    def clear_inputs(self):
+        """Clear input fields"""
+        self.entries["call"].delete(0, "end")
+        self.entries["note"].delete(0, "end")
+        self.entries["call"].focus()
         
-        contest_key = self.cfg.get("contest")
-        contest_rules = self.contest_manager.get_rules(contest_key)
+        # Reset edit state
+        if self.edit_index is not None:
+            self.edit_index = None
+            self.log_btn.config(text=Lang.t("log"), bg=THEME["accent"])
+    
+    def edit_selected(self):
+        """Edit selected QSO"""
+        selection = self.tree.selection()
+        if not selection:
+            return
         
-        for i, q in enumerate(self.log):
-            display_note = q["n"]
-            if contest_key == "maraton" and contest_rules:
-                score = ScoringEngine.calculate_score(q, contest_rules, self.cfg)
-                display_note = f"{q['n']} ({score}p)"
+        self.edit_index = int(selection[0])
+        qso = self.log_data[self.edit_index]
+        
+        # Fill entries
+        self.entries["call"].delete(0, "end")
+        self.entries["call"].insert(0, qso.get("c", ""))
+        
+        self.entries["band"].set(qso.get("b", "40m"))
+        self.entries["mode"].set(qso.get("m", "SSB"))
+        
+        self.entries["rst_s"].delete(0, "end")
+        self.entries["rst_s"].insert(0, qso.get("s", "59"))
+        
+        self.entries["rst_r"].delete(0, "end")
+        self.entries["rst_r"].insert(0, qso.get("r", "59"))
+        
+        self.entries["note"].delete(0, "end")
+        self.entries["note"].insert(0, qso.get("n", ""))
+        
+        # Date/time
+        self.entries["date"].config(state="normal")
+        self.entries["date"].delete(0, "end")
+        self.entries["date"].insert(0, qso.get("d", ""))
+        if not self.manual_dt_var.get():
+            self.entries["date"].config(state="disabled")
+        
+        self.entries["time"].config(state="normal")
+        self.entries["time"].delete(0, "end")
+        self.entries["time"].insert(0, qso.get("t", ""))
+        if not self.manual_dt_var.get():
+            self.entries["time"].config(state="disabled")
+        
+        # Update button
+        self.log_btn.config(text=Lang.t("update"), bg=THEME["warning"])
+    
+    def delete_selected(self):
+        """Delete selected QSO"""
+        selection = self.tree.selection()
+        if not selection:
+            return
+        
+        if messagebox.askyesno(Lang.t("confirm_delete"), Lang.t("confirm_delete_text")):
+            indices = sorted([int(x) for x in selection], reverse=True)
+            for idx in indices:
+                self.log_data.pop(idx)
             
-            self.tr.insert("", "end", iid=i, values=(
-                q["c"], q["b"], q["m"], q["s"], q["r"], display_note, q["d"], q["t"]
-            ))
+            self.refresh_log()
+            DataManager.save_json("log.json", self.log_data)
     
-    def clr(self):
-        self.en["c"].delete(0, "end")
-        self.en["n"].delete(0, "end")
-        self.en["c"].focus()
+    # =========================================================================
+    # EVENT HANDLERS
+    # =========================================================================
     
-    def ed(self, e):
-        if e:
-            id = self.tr.identify_row(e.y)
-        else:
-            s = self.tr.selection()
-            if not s:
-                return
-            id = s[0]
-        
-        if not id: 
-            return
-        self.idx = int(id)
-        q = self.log[self.idx]
-        
-        for k, v in zip(["c", "b", "m", "s", "r", "n"], 
-                        [q["c"], q["b"], q["m"], q["s"], q["r"], q["n"]]):
-            if k in ["b", "m"]:
-                self.en[k].set(v)
-            else:
-                self.en[k].delete(0, "end")
-                self.en[k].insert(0, v)
-        
-        self.en["d_manual"].config(state="normal")
-        self.en["d_manual"].delete(0, "end")
-        self.en["d_manual"].insert(0, q["d"])
-        
-        self.en["t_manual"].config(state="normal")
-        self.en["t_manual"].delete(0, "end")
-        self.en["t_manual"].insert(0, q["t"])
-        
-        if not self.manual_datetime_var.get():
-            self.en["d_manual"].config(state="disabled")
-            self.en["t_manual"].config(state="disabled")
-        
-        self.bl.config(text=lang_manager.t("update"), bg="#f57c00")
+    def on_enter_pressed(self, event):
+        """Handle Enter key press"""
+        if isinstance(self.focus_get(), tk.Entry):
+            self.add_qso()
+            return "break"
     
-    def dl(self):
-        s = self.tr.selection()
-        if not s: 
-            return
+    def on_tree_double_click(self, event):
+        """Handle double-click on tree"""
+        self.edit_selected()
+    
+    def on_tree_right_click(self, event):
+        """Handle right-click on tree"""
+        item = self.tree.identify_row(event.y)
+        if item:
+            self.tree.selection_set(item)
+            self.ctx_menu.post(event.x_root, event.y_root)
+    
+    def on_language_change(self, event):
+        """Handle language change"""
+        Lang.set(self.lang_var.get())
+        self.config_data["lang"] = self.lang_var.get()
+        DataManager.save_json("config.json", self.config_data)
         
-        if messagebox.askyesno(lang_manager.t("confirm_delete"), lang_manager.t("confirm_delete_text")):
-            indices = sorted([int(x) for x in s], reverse=True)
-            for i in indices:
-                self.log.pop(i)
-            self.ref()
+        # Rebuild UI
+        for widget in self.winfo_children():
+            widget.destroy()
+        
+        self.create_menu()
+        self.create_ui()
+        self.create_context_menu()
+        self.refresh_log()
+    
+    def on_contest_change(self, event):
+        """Handle contest change"""
+        self.config_data["contest"] = self.contest_var.get()
+        self.config_data["cat"] = 0  # Reset category
+        DataManager.save_json("config.json", self.config_data)
+        
+        self.update_contest_controls()
+        self.refresh_log()
+    
+    def save_contest_settings(self):
+        """Save contest-specific settings"""
+        contest_key = self.config_data.get("contest", "maraton")
+        contest = self.contests.get(contest_key, {})
+        categories = contest.get("categories", [])
+        
+        # Find category index
+        selected_cat = self.cat_var.get()
+        try:
+            cat_idx = categories.index(selected_cat)
+        except ValueError:
+            cat_idx = 0
+        
+        self.config_data["cat"] = cat_idx
+        
+        # Save county for Maraton
+        if contest_key == "maraton" and hasattr(self, 'county_var'):
+            self.config_data["county"] = self.county_var.get()
+        
+        DataManager.save_json("config.json", self.config_data)
+        self.update_info_bar()
+        messagebox.showinfo("OK", Lang.t("settings_saved"))
+    
+    # =========================================================================
+    # DIALOGS
+    # =========================================================================
+    
+    def show_about(self):
+        """Show about dialog"""
+        dialog = tk.Toplevel(self)
+        dialog.title(Lang.t("about"))
+        dialog.geometry("450x300")
+        dialog.resizable(False, False)
+        dialog.configure(bg=THEME["bg"])
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Credits
+        tk.Label(dialog, text="YO Log PRO v13.0", bg=THEME["bg"],
+                fg=THEME["accent"], font=("Consolas", 16, "bold")).pack(pady=20)
+        
+        tk.Label(dialog, text=Lang.t("credits"), bg=THEME["bg"],
+                fg=THEME["fg"], font=self.font_main, justify="center").pack(pady=10)
+        
+        tk.Label(dialog, text=Lang.t("usage"), bg=THEME["bg"],
+                fg=THEME["fg"], font=("Consolas", 10), justify="left").pack(pady=10, padx=20)
+        
+        tk.Button(dialog, text=Lang.t("close"), command=dialog.destroy,
+                 bg=THEME["accent"], fg="white", width=15).pack(pady=15)
+    
+    def show_settings(self):
+        """Show settings dialog"""
+        dialog = tk.Toplevel(self)
+        dialog.title(Lang.t("settings"))
+        dialog.geometry("400x350")
+        dialog.resizable(False, False)
+        dialog.configure(bg=THEME["bg"])
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        tk.Label(dialog, text=Lang.t("station_info"), bg=THEME["bg"],
+                fg=THEME["accent"], font=self.font_bold).pack(pady=10, anchor="w", padx=20)
+        
+        # Callsign
+        tk.Label(dialog, text=Lang.t("call") + ":", bg=THEME["bg"],
+                fg=THEME["fg"]).pack(anchor="w", padx=20)
+        call_entry = tk.Entry(dialog, bg=THEME["entry_bg"], fg=THEME["fg"],
+                             font=self.font_main, width=40)
+        call_entry.insert(0, self.config_data.get("call", ""))
+        call_entry.pack(pady=2, padx=20, fill="x")
+        
+        # Locator
+        tk.Label(dialog, text=Lang.t("locator"), bg=THEME["bg"],
+                fg=THEME["fg"]).pack(anchor="w", padx=20)
+        loc_entry = tk.Entry(dialog, bg=THEME["entry_bg"], fg=THEME["fg"],
+                            font=self.font_main, width=40)
+        loc_entry.insert(0, self.config_data.get("loc", ""))
+        loc_entry.pack(pady=2, padx=20, fill="x")
+        
+        # County
+        tk.Label(dialog, text=Lang.t("county") + ":", bg=THEME["bg"],
+                fg=THEME["fg"]).pack(anchor="w", padx=20)
+        jud_entry = tk.Entry(dialog, bg=THEME["entry_bg"], fg=THEME["fg"],
+                            font=self.font_main, width=40)
+        jud_entry.insert(0, self.config_data.get("jud", ""))
+        jud_entry.pack(pady=2, padx=20, fill="x")
+        
+        # Address
+        tk.Label(dialog, text=Lang.t("address"), bg=THEME["bg"],
+                fg=THEME["fg"]).pack(anchor="w", padx=20)
+        addr_entry = tk.Entry(dialog, bg=THEME["entry_bg"], fg=THEME["fg"],
+                             font=self.font_main, width=40)
+        addr_entry.insert(0, self.config_data.get("addr", ""))
+        addr_entry.pack(pady=2, padx=20, fill="x")
+        
+        # Font size
+        tk.Label(dialog, text=Lang.t("font_size"), bg=THEME["bg"],
+                fg=THEME["fg"]).pack(anchor="w", padx=20)
+        fs_entry = tk.Entry(dialog, bg=THEME["entry_bg"], fg=THEME["fg"],
+                           font=self.font_main, width=10)
+        fs_entry.insert(0, str(self.config_data.get("fs", 12)))
+        fs_entry.pack(pady=2, padx=20, anchor="w")
+        
+        def save():
+            self.config_data["call"] = call_entry.get().upper().strip()
+            self.config_data["loc"] = loc_entry.get().upper().strip()
+            self.config_data["jud"] = jud_entry.get().upper().strip()
+            self.config_data["addr"] = addr_entry.get().strip()
+            
+            try:
+                self.config_data["fs"] = int(fs_entry.get())
+            except ValueError:
+                self.config_data["fs"] = 12
+            
+            DataManager.save_json("config.json", self.config_data)
             self.update_info_bar()
-            DataManager.atomic_save("log.json", self.log)
-            DataManager.create_backup(self.log)
-
-    def validate(self):
-        contest_key = self.cfg.get("contest")
-        contest_rules = self.contest_manager.get_rules(contest_key)
+            messagebox.showinfo("OK", Lang.t("settings_saved"))
+            dialog.destroy()
         
-        if not contest_rules:
-            messagebox.showerror("Eroare", "Reguli de concurs negăsite.")
-            return
-
-        contest_rules['key'] = contest_key
+        tk.Button(dialog, text=Lang.t("save"), command=save,
+                 bg=THEME["accent"], fg="white", width=15,
+                 font=self.font_main).pack(pady=20)
+    
+    def show_stats(self):
+        """Show statistics dialog"""
+        band_count = Counter(qso.get("b", "") for qso in self.log_data)
+        mode_count = Counter(qso.get("m", "") for qso in self.log_data)
         
-        valid, msg, score = ScoringEngine.validate_log(self.log, contest_rules, self.cfg)
+        stats_text = f"Total QSO: {len(self.log_data)}\n\n"
+        stats_text += "Per bandă:\n"
+        for band in sorted(band_count.keys()):
+            stats_text += f"  {band}: {band_count[band]}\n"
+        
+        stats_text += "\nPer mod:\n"
+        for mode in sorted(mode_count.keys()):
+            stats_text += f"  {mode}: {mode_count[mode]}\n"
+        
+        # Contest-specific stats
+        contest_key = self.config_data.get("contest", "maraton")
+        user_county = self.config_data.get("county", "NT")
+        
+        if contest_key == "maraton":
+            total_score = sum(
+                ScoringEngine.calculate_qso_score(qso.get("c", ""), contest_key, 
+                                                   self.contests, user_county)
+                for qso in self.log_data
+            )
+            
+            calls = {qso.get("c", "").upper() for qso in self.log_data}
+            required = self.contests.get("maraton", {}).get("required_stations", [])
+            found = [s for s in required if s in calls]
+            
+            stats_text += f"\n{Lang.t('stations_worked')}: {len(calls)}"
+            stats_text += f"\n{Lang.t('required_stations')}: {', '.join(found) if found else 'Niciuna'}"
+            stats_text += f"\n\n{Lang.t('total_score')}: {total_score}"
+        
+        messagebox.showinfo(Lang.t("stats"), stats_text)
+    
+    def validate_log(self):
+        """Validate log against contest rules"""
+        contest_key = self.config_data.get("contest", "maraton")
+        
+        valid, message, score = ScoringEngine.validate_log(
+            self.log_data, contest_key, self.contests, self.config_data
+        )
         
         if valid:
-            min_qso = contest_rules.get("min_qso_for_diploma", 100)
-            diploma = "DA" if len(self.log) >= min_qso else "NU"
-            messagebox.showinfo(lang_manager.t("validation_result"), 
-                f"✓ {msg}\n\nScor Total: {score}\nEligibil Diplomă ({min_qso} QSO): {diploma}")
+            min_qso = self.contests.get(contest_key, {}).get("min_qso_diploma", 100)
+            diploma = "DA" if len(self.log_data) >= min_qso else "NU"
+            
+            messagebox.showinfo(Lang.t("validation_result"),
+                               f"✓ {message}\n\nEligibil diplomă: {diploma}")
         else:
-            messagebox.showwarning(lang_manager.t("validation_result"), f"✗ {msg}")
+            messagebox.showwarning(Lang.t("validation_result"), f"✗ {message}")
     
-    def export_menu(self):
-        d = tk.Toplevel(self)
-        d.title("Export")
-        d.geometry("300x250")
-        d.configure(bg=self.th["bg"])
+    def show_export(self):
+        """Show export dialog"""
+        dialog = tk.Toplevel(self)
+        dialog.title(Lang.t("export"))
+        dialog.geometry("280x220")
+        dialog.resizable(False, False)
+        dialog.configure(bg=THEME["bg"])
+        dialog.transient(self)
+        dialog.grab_set()
         
-        tk.Label(d, text="Selectează formatul:", font=("Consolas", 11, "bold"), 
-                bg=self.th["bg"], fg=self.th["fg"]).pack(pady=10)
+        tk.Label(dialog, text=Lang.t("select_format"), bg=THEME["bg"],
+                fg=THEME["fg"], font=self.font_bold).pack(pady=15)
         
-        tk.Button(d, text="Cabrillo (.log)", command=lambda: self.export_cabrillo(d),
-               bg=self.th["ac"], fg="white", width=20).pack(pady=5)
-        tk.Button(d, text="ADIF 3.1.0 (.adi)", command=lambda: self.export_adif(d),
-               bg=self.th["ac"], fg="white", width=20).pack(pady=5)
-        tk.Button(d, text="CSV (.csv)", command=lambda: self.export_csv(d),
-               bg=self.th["ac"], fg="white", width=20).pack(pady=5)
-        tk.Button(d, text="Anulează", command=d.destroy, bg="#666", fg="white", width=20).pack(pady=10)
+        tk.Button(dialog, text="Cabrillo (.log)", 
+                 command=lambda: self.export_cabrillo(dialog),
+                 bg=THEME["accent"], fg="white", width=20).pack(pady=5)
+        
+        tk.Button(dialog, text="ADIF (.adi)",
+                 command=lambda: self.export_adif(dialog),
+                 bg=THEME["accent"], fg="white", width=20).pack(pady=5)
+        
+        tk.Button(dialog, text="CSV (.csv)",
+                 command=lambda: self.export_csv(dialog),
+                 bg=THEME["accent"], fg="white", width=20).pack(pady=5)
+        
+        tk.Button(dialog, text=Lang.t("cancel"), command=dialog.destroy,
+                 bg=THEME["btn_bg"], fg="white", width=20).pack(pady=15)
     
     def export_cabrillo(self, parent):
+        """Export to Cabrillo format"""
         try:
-            contest_key = self.cfg.get("contest")
-            contest_rules = self.contest_manager.get_rules(contest_key)
+            contest_key = self.config_data.get("contest", "maraton")
+            contest = self.contests.get(contest_key, {})
+            contest_name = contest.get("name_" + Lang.get(), contest_key)
             
-            content = "START-OF-LOG: 3.0\n"
-            content += f"CONTEST: {contest_rules.get('name', {}).get(self.cfg.get('lang', 'ro'), 'Unknown')}\n"
-            content += f"CALLSIGN: {self.cfg.get('call', 'NOCALL')}\n"
-            content += f"CATEGORY: {self.cfg.get('cat', 'A')}\n"
-            content += "BAND: ALL\nMODE: ALL\n"
+            lines = [
+                "START-OF-LOG: 3.0",
+                f"CONTEST: {contest_name}",
+                f"CALLSIGN: {self.config_data.get('call', 'NOCALL')}",
+                f"LOCATION: {self.config_data.get('loc', '')}",
+                "CATEGORY: ALL",
+            ]
             
-            for qso in self.log:
-                content += f"QSO: {qso['b']} {qso['m']} {qso['d']} {qso['t']} {qso['c']} 599 {qso['r']} 001\n"
+            for qso in self.log_data:
+                line = f"QSO: {qso['b']:>5} {qso['m']:<4} {qso['d']} {qso['t']} "
+                line += f"{self.config_data.get('call', 'NOCALL'):<13} {qso['s']} "
+                line += f"{qso['c']:<13} {qso['r']}"
+                lines.append(line)
             
-            content += "END-OF-LOG:\n"
+            lines.append("END-OF-LOG:")
             
             filename = f"cabrillo_{contest_key}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.log"
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write(content)
+            filepath = os.path.join(get_data_dir(), filename)
             
-            messagebox.showinfo("Succes", f"Exportat în {filename}")
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+            
+            messagebox.showinfo(Lang.t("export_success"), f"Salvat: {filename}")
             parent.destroy()
         except Exception as e:
-            messagebox.showerror("Eroare", str(e))
+            messagebox.showerror(Lang.t("error"), str(e))
     
     def export_adif(self, parent):
+        """Export to ADIF format"""
         try:
-            content = ""
-            for qso in self.log:
-                content += f"<CALL:{len(qso['c'])}>{qso['c']}"
-                content += f"<BAND:{len(qso['b'])}>{qso['b']}"
-                content += f"<MODE:{len(qso['m'])}>{qso['m']}"
-                content += f"<QSO_DATE:{len(qso['d'].replace('-', ''))}>{qso['d'].replace('-', '')}"
-                content += f"<TIME_ON:{len(qso['t'].replace(':', ''))}>{qso['t'].replace(':', '')}"
-                content += f"<RST_SENT:{len(qso['s'])}>{qso['s']}"
-                content += f"<RST_RCVD:{len(qso['r'])}>{qso['r']}"
+            lines = ["<ADIF_VER:5>3.1.0", "<EOH>", ""]
+            
+            for qso in self.log_data:
+                record = ""
+                record += f"<CALL:{len(qso['c'])}>{qso['c']}"
+                record += f"<BAND:{len(qso['b'])}>{qso['b']}"
+                record += f"<MODE:{len(qso['m'])}>{qso['m']}"
+                
+                date_clean = qso['d'].replace("-", "")
+                record += f"<QSO_DATE:{len(date_clean)}>{date_clean}"
+                
+                time_clean = qso['t'].replace(":", "") + "00"
+                record += f"<TIME_ON:{len(time_clean)}>{time_clean}"
+                
+                record += f"<RST_SENT:{len(qso['s'])}>{qso['s']}"
+                record += f"<RST_RCVD:{len(qso['r'])}>{qso['r']}"
+                
                 if qso.get('n'):
-                    content += f"<COMMENT:{len(qso['n'])}>{qso['n']}"
-                content += "<EOR>\n"
+                    record += f"<COMMENT:{len(qso['n'])}>{qso['n']}"
+                
+                record += "<EOR>"
+                lines.append(record)
             
             filename = f"adif_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.adi"
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write(content)
+            filepath = os.path.join(get_data_dir(), filename)
             
-            messagebox.showinfo("Succes", f"Exportat în {filename}")
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+            
+            messagebox.showinfo(Lang.t("export_success"), f"Salvat: {filename}")
             parent.destroy()
         except Exception as e:
-            messagebox.showerror("Eroare", str(e))
+            messagebox.showerror(Lang.t("error"), str(e))
     
     def export_csv(self, parent):
+        """Export to CSV format"""
         try:
-            filename = f"csv_export_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.csv"
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write("Data,Ora,Call,Band,Mode,RST S,RST R,Nota\n")
-                for qso in self.log:
-                    f.write(f"{qso['d']},{qso['t']},{qso['c']},{qso['b']},{qso['m']},{qso['s']},{qso['r']},{qso['n']}\n")
+            lines = ["Date,Time,Call,Band,Mode,RST_Sent,RST_Rcvd,Note"]
             
-            messagebox.showinfo("Succes", f"Exportat în {filename}")
+            for qso in self.log_data:
+                line = f"{qso['d']},{qso['t']},{qso['c']},{qso['b']},{qso['m']},"
+                line += f"{qso['s']},{qso['r']},{qso.get('n', '')}"
+                lines.append(line)
+            
+            filename = f"log_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+            filepath = os.path.join(get_data_dir(), filename)
+            
+            with open(filepath, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+            
+            messagebox.showinfo(Lang.t("export_success"), f"Salvat: {filename}")
             parent.destroy()
         except Exception as e:
-            messagebox.showerror("Eroare", str(e))
+            messagebox.showerror(Lang.t("error"), str(e))
     
-    def set(self):
-        d = tk.Toplevel(self)
-        d.title("Setări")
-        d.geometry("450x450")
-        d.grab_set()
-        d.configure(bg=self.th["bg"])
-        
-        tk.Label(d, text="Info Stație:", font=("Consolas", 10, "bold"), bg=self.th["bg"], fg=self.th["fg"]).pack(pady=5, anchor="w", padx=10)
-        
-        tk.Label(d, text="Indicativ:", bg=self.th["bg"], fg=self.th["fg"]).pack(anchor="w", padx=10)
-        e1 = tk.Entry(d, bg=self.th["eb"], fg=self.th["fg"], font=self.fnt_main, width=50)
-        e1.insert(0, self.cfg["call"])
-        e1.pack(fill="x", pady=2, padx=10)
-        
-        tk.Label(d, text="Locator:", bg=self.th["bg"], fg=self.th["fg"]).pack(anchor="w", padx=10)
-        e2 = tk.Entry(d, bg=self.th["eb"], fg=self.th["fg"], font=self.fnt_main, width=50)
-        e2.insert(0, self.cfg["loc"])
-        e2.pack(fill="x", pady=2, padx=10)
-        
-        tk.Label(d, text="Județ:", bg=self.th["bg"], fg=self.th["fg"]).pack(anchor="w", padx=10)
-        e3 = tk.Entry(d, bg=self.th["eb"], fg=self.th["fg"], font=self.fnt_main, width=50)
-        e3.insert(0, self.cfg["jud"])
-        e3.pack(fill="x", pady=2, padx=10)
-
-        tk.Label(d, text="Adresă:", bg=self.th["bg"], fg=self.th["fg"]).pack(anchor="w", padx=10)
-        e_addr = tk.Entry(d, bg=self.th["eb"], fg=self.th["fg"], font=self.fnt_main, width=50)
-        e_addr.insert(0, self.cfg.get("addr", ""))
-        e_addr.pack(fill="x", pady=2, padx=10)
-        
-        tk.Label(d, text="Mărime Font:", bg=self.th["bg"], fg=self.th["fg"]).pack(anchor="w", padx=10)
-        e4 = tk.Entry(d, bg=self.th["eb"], fg=self.th["fg"], font=self.fnt_main, width=10)
-        e4.insert(0, self.cfg["fs"])
-        e4.pack(anchor="w", pady=2, padx=10)
-        
-        def save_settings():
-            self.cfg["call"] = e1.get()
-            self.cfg["loc"] = e2.get()
-            self.cfg["jud"] = e3.get()
-            self.cfg["addr"] = e_addr.get()
-            try:
-                self.cfg["fs"] = int(e4.get())
-            except:
-                self.cfg["fs"] = 12
-            
-            DataManager.atomic_save("config.json", self.cfg)
-            messagebox.showinfo("OK", "Setări salvate! Reporniți aplicația pentru a aplica mărimea fontului.")
-            d.destroy()
-        
-        tk.Button(d, text=lang_manager.t("save_changes"), command=save_settings, 
-                 bg=self.th["ac"], fg="white", width=20, font=self.fnt_main).pack(pady=20)
-    
-    def st(self):
-        b = Counter(q["b"] for q in self.log)
-        m = f"Total: {len(self.log)} QSOs\n\n"
-        for k in sorted(b.keys()):
-            m += f"{k}: {b[k]}\n"
-        
-        contest_key = self.cfg.get("contest")
-        if contest_key == "maraton":
-            contest_rules = self.contest_manager.get_rules(contest_key)
-            required = contest_rules.get("required_stations", [])
-            calls = [qso["c"].upper() for qso in self.log]
-            found = [s for s in required if s in calls]
-            m += f"\n{lang_manager.t('stations_worked')}: {len(set(calls))}"
-            if found:
-                m += f"\n{lang_manager.t('required_stations')}: {', '.join(found)}"
-            
-            total_score = sum(ScoringEngine.calculate_score(q, contest_rules, self.cfg) for q in self.log)
-            m += f"\n\n{lang_manager.t('total_score')}: {total_score}"
-
-        messagebox.showinfo("Stats", m)
-    
-    def manual_backup(self):
-        if DataManager.create_backup(self.log):
-            messagebox.showinfo(lang_manager.t("backup_success"), lang_manager.t("backup_success_text"))
+    def create_backup(self):
+        """Create manual backup"""
+        if DataManager.create_backup(self.log_data):
+            messagebox.showinfo("OK", Lang.t("backup_success"))
         else:
-            messagebox.showerror(lang_manager.t("backup_error"), lang_manager.t("backup_error_text"))
-
+            messagebox.showerror(Lang.t("error"), Lang.t("backup_error"))
+    
     def on_exit(self):
-        if messagebox.askyesno(lang_manager.t("exit_confirm"), lang_manager.t("exit_confirm")):
-            DataManager.atomic_save("log.json", self.log)
-            DataManager.create_backup(self.log)
-            DataManager.atomic_save("config.json", self.cfg)
+        """Handle application exit"""
+        if messagebox.askyesno(Lang.t("exit_confirm"), Lang.t("exit_confirm")):
+            DataManager.save_json("log.json", self.log_data)
+            DataManager.save_json("config.json", self.config_data)
+            DataManager.create_backup(self.log_data)
             self.destroy()
+
+
+# =============================================================================
+# MAIN ENTRY POINT
+# =============================================================================
 
 if __name__ == "__main__":
     app = RadioLogApp()
