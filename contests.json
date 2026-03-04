@@ -1,0 +1,50 @@
+{
+    "maraton": {
+        "name": "Maraton Ion Creangă",
+        "categories": {
+            "A": "A. Seniori YO (>18 ani)",
+            "B": "B. YL",
+            "C": "C. Juniori YO (<=18 ani)",
+            "D": "D. Club",
+            "E": "E. DX",
+            "F": "F. Receptori"
+        },
+        "required_stations": ["YP8IC", "YR8TGN"],
+        "special_scoring": {
+            "YP8IC": 20,
+            "YR8TGN": 20,
+            "IC_CLUB": 10,
+            "IC_INDIVIDUAL": 5
+        },
+        "counties_for_ic_score": ["NT", "IS"],
+        "min_qso_for_diploma": 100,
+        "scoring_mode": "maraton_special"
+    },
+    "stafeta": {
+        "name": "Cupa Moldovei (Stafeta)",
+        "categories": {
+            "A": "A. Echipe Seniori",
+            "B": "B. Echipe Juniori",
+            "C": "C. Echipe Mixte"
+        },
+        "scoring_mode": "category_based",
+        "min_qso": 50
+    },
+    "yo-dx": {
+        "name": "YO-DX-HF",
+        "categories": {
+            "A": "A. Single-Op High",
+            "B": "B. Single-Op Low",
+            "C": "C. Multi-Op"
+        },
+        "scoring_mode": "standard",
+        "exchange_serial": true
+    },
+    "log_simplu": {
+        "name": "Log Simplu (Cursă de Zi)",
+        "categories": {
+            "A": "A. Individual"
+        },
+        "scoring_mode": "none"
+    }
+}
