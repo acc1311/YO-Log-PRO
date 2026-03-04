@@ -1,4 +1,4 @@
-# 📻 YO Log PRO v3.0 — Multi-Contest Amateur Radio Logger
+# 📻 YO Log PRO v13.0 — Multi-Contest Amateur Radio Logger
 
 <p align="center">
   <img src="https://img.shields.io/badge/Version-13.0-blue?style=for-the-badge" />
