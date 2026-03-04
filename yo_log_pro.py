@@ -246,11 +246,11 @@ class RadioLogApp(tk.Tk):
         super().__init__()
         
         # --- CENTRARE FEREASTRĂ ---
-        self.center_window(1024, 600) # Dimensiune optimizată
+        self.center_window(1024, 600)
         
         self.title(lang_manager.t("app_title"))
         self.geometry("1024x600")
-        self.minsize(900, 550) # Dimensiune minimă acceptabilă
+        self.minsize(900, 550)
         
         self.cfg = DataManager.load_data("config.json", {
             "call": "YO8ACR", "loc": "KN37", "jud": "NT", 
@@ -332,16 +332,28 @@ class RadioLogApp(tk.Tk):
         
         # Calcul dimensiune aplicație
         try:
-            exe_path = sys.executable if hasattr(sys, 'frozen') else __file__
-            size_bytes = os.path.getsize(exe_path)
-            size_kb = size_bytes / 1024
-            size_str = f"{size_kb:.2f} KB" if size_kb < 1024 else f"{size_kb/1024:.2f} MB"
+            # În PyInstaller, sys.executable pointează către exe-ul temporar sau real
+            exe_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
+            # Încercăm să găsim exe-ul real
+            if hasattr(sys, 'frozen'):
+                exe_file = sys.executable
+            else:
+                exe_file = __file__
             
-            lbl_size = tk.Label(frame_credits, text=f"{lang_manager.t('app_size')} {size_str}", {lang_manager.t('app_title')}", 
-                               bg=self.th["bg"], fg=self.th["ac"], font=("Consolas", 9))
-            lbl_size.pack(pady=5)
-        except:
-            pass # Ignoră eroarea dacă nu poate calcula dimensiunea
+            if os.path.exists(exe_file):
+                size_bytes = os.path.getsize(exe_file)
+                size_kb = size_bytes / 1024
+                if size_kb < 1024:
+                    size_str = f"{size_kb:.2f} KB"
+                else:
+                    size_str = f"{size_kb/1024:.2f} MB"
+                
+                # LINIA CORECTATĂ AICI:
+                lbl_size = tk.Label(frame_credits, text=f"{lang_manager.t('app_size')} {size_str}", 
+                                   bg=self.th["bg"], fg=self.th["ac"], font=("Consolas", 9))
+                lbl_size.pack(pady=5)
+        except Exception as e:
+            print(f"Nu s-a putut calcula dimensiunea: {e}")
 
         # Tab 2: Utilizare
         frame_usage = tk.Frame(nb, bg=self.th["bg"])
@@ -406,24 +418,9 @@ class RadioLogApp(tk.Tk):
         self.theme_btn = tk.Button(h, text="☀/🌙", command=self.toggle_theme, bg=self.th["ac"], fg="white", width=3)
         self.theme_btn.pack(side="right", padx=5)
         
-        # Input Frame (cu scrollbar dacă e nevoie)
+        # Input Frame
         f = tk.Frame(self, bg=self.th["bg"], pady=5)
         f.pack(fill="x", padx=10)
-        
-        # Canvas + Scrollbar pentru inputuri (pentru rezoluții mici)
-        canvas = tk.Canvas(f, bg=self.th["bg"], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(f, orient="horizontal", command=canvas.xview)
-        scrollable_frame = ttk.Frame(canvas)
-        
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(xscrollcommand=scrollbar.set)
-        
-        canvas.pack(side="top", fill="x", expand=True)
-        scrollbar.pack(side="bottom", fill="x")
         
         self.en = {}
         fields = [
@@ -436,7 +433,7 @@ class RadioLogApp(tk.Tk):
         ]
         
         for i, (l, k, w) in enumerate(fields):
-            px = tk.Frame(scrollable_frame, bg=self.th["bg"])
+            px = tk.Frame(f, bg=self.th["bg"])
             px.grid(row=0, column=i, padx=5)
             tk.Label(px, text=l, fg="#bbb", bg=self.th["bg"]).pack()
             
@@ -455,16 +452,16 @@ class RadioLogApp(tk.Tk):
             e.pack()
             self.en[k] = e
         
-        self.search_btn = tk.Button(scrollable_frame, text=lang_manager.t("search"), command=self.search_online, 
+        self.search_btn = tk.Button(f, text=lang_manager.t("search"), command=self.search_online, 
                                 bg=self.th["ac"], fg="white", width=10)
         self.search_btn.grid(row=0, column=len(fields), padx=5)
         
-        self.bl = tk.Button(scrollable_frame, text=lang_manager.t("log"), command=self.do_l, bg=self.th["ac"], fg="white", width=10, font=("Consolas", self.fs, "bold"))
+        self.bl = tk.Button(f, text=lang_manager.t("log"), command=self.do_l, bg=self.th["ac"], fg="white", width=10, font=("Consolas", self.fs, "bold"))
         self.bl.grid(row=0, column=len(fields)+1, padx=10)
         
         # Dynamic Controls
         self.dynamic_controls_frame = tk.Frame(f, bg=self.th["bg"])
-        self.dynamic_controls_frame.grid(row=1, column=0, columnspan=10, pady=5) # Grid în canvas frame
+        self.dynamic_controls_frame.grid(row=1, column=0, columnspan=10, pady=5)
         self.update_dynamic_controls()
         
         # Treeview Frame
@@ -476,7 +473,6 @@ class RadioLogApp(tk.Tk):
         
         self.tr = ttk.Treeview(t_f, columns=(1,2,3,4,5,6,7,8), show="headings")
         
-        # Ajustare lățimi coloane pentru 1024px
         widths = [120, 70, 70, 50, 50, 150, 80, 80]
         for i, n in enumerate(cols, 1):
             self.tr.heading(i, text=n)
@@ -582,7 +578,7 @@ class RadioLogApp(tk.Tk):
         n = datetime.datetime.utcnow()
         q = {
             "d": n.strftime("%Y-%m-%d"),
-            "t": n.strftime("%H:%M:%S"), # Format cu secunde
+            "t": n.strftime("%H:%M:%S"),
             "c": c,
             "b": self.en["b"].get(),
             "m": self.en["m"].get(),
