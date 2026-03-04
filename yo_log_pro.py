@@ -253,22 +253,29 @@ class ScoringEngine:
             calls = [qso["c"].upper() for qso in log_data]
             missing = [s for s in required if s not in calls]
             if missing:
-                return False, f"Missing required stations: {', '.join(missing)}", 0"
+                return (False, 
+                    f"Missing required stations: {', '.join(missing)}", 0")
             if len(log_data) < contest_rules.get("min_qso_for_diploma", 100):
-                return False, f"Minimum {contest_rules['min_qso_for_diploma']} QSOs required for diploma, you have {len(log_data)}", 0
+                return (False, 
+                    f"Minimum {contest_rules['min_qso_for_diploma']} QSOs required for diploma, "
+                    f"you have {len(log_data)}", 0")
             total_score = sum(ScoringEngine.calculate_score(q, contest_rules, user_config) for q in log_data)
-            return True, f"Valid! Score: {total_score}", total_score
+            return (True, f"Valid! Score: {total_score}", "
+                f"Eligible Diploma ({contest_rules.get('min_qso_for_diploma', 100)} QSO): "
+                f"{'DA' if len(log_data) >= contest_rules.get('min_qso_for_diploma', 100) else 'NU'}", 
+                total_score)
         elif contest_key == "stafeta":
             if len(log_data) < contest_rules.get("min_qso", 50):
-                return False, f"Minimum {contest_rules['min_qso']} QSOs required, you have {len(log_data)}", 0
-            return True, f"Valid! {len(log_data)} QSOs", len(log_data)
+                return (False, 
+                    f"Minimum {contest_rules['min_qso']} QSOs required, you have {len(log_data)}", 0")
+            return (True, f"Valid! {len(log_data)} QSOs", len(log_data))
         elif contest_key == "yo-dx":
             if len(log_data) == 0: return False, "No QSOs", 0
-            return True, f"Valid! {len(log_data)} QSOs", len(log_data)
+            return (True, f"Valid! {len(log_data)} QSOs", len(log_data))
         elif contest_key == "log_simplu":
-            return True, f"Log: {len(log_data)} QSOs", len(log_data)
+            return (True, f"Log: {len(log_data)} QSOs", len(log_data))
         else:
-            return True, f"Log: {len(log_data)} QSOs", len(log_data)
+            return (True, f"Log: {len(log_data)} QSOs", len(log_data))
 
 class ContestManager:
     def __init__(self, rules_dict):
@@ -526,9 +533,88 @@ class RadioLogApp(tk.Tk):
         
         self.tr = ttk.Treeview(t_f, columns=(1,2,3,4,5,6,7,8), show="headings", selectmode="browse")
         
-        widths = [150, 70, 70, 50, 5 dicționar, nu pe valoare
-            cat_values_text = [v.get(self.cfg.get('lang', 'ro'), k) for k, v in rules["categories"].items()]
-            cat_combo = ttk.Combobox(f, textvariable=self.cat_var, values=cat_values_text, state="readonly", width=20)
+        widths = [150, 70, 70, 50, 50, 150, 90, 80]
+        for i, n in enumerate(cols, 1):
+            self.tr.heading(i, text=n)
+            self.tr.column(i, width=widths[i-1], anchor="center" if i < 7 else "w")
+        
+        self.tr.pack(side="left", fill="both", expand=True)
+        
+        sb = tk.Scrollbar(t_f, command=self.tr.yview)
+        sb.pack(side="right", fill="y")
+        self.tr.config(yscrollcommand=sb.set)
+        
+        self.tr.bind("<Button-3>", self.show_context_menu)
+        self.tr.bind("<Double-Button-1>", self.ed)
+        
+        # Bottom Buttons
+        bt = tk.Frame(self, bg=self.th["hd"])
+        bt.pack(fill="x", pady=5)
+        
+        btn_style = {"bg": self.th["btn"], "fg": self.th["btn_fg"], "relief": "flat", "padx": 10, "font": self.fnt_main}
+        
+        tk.Button(bt, text=lang_manager.t("stats"), command=self.st, **btn_style).pack(side="left", padx=5)
+        tk.Button(bt, text=lang_manager.t("validate"), command=self.validate, **btn_style).pack(side="left", padx=5)
+        tk.Button(bt, text=lang_manager.t("export"), command=self.export_menu, **btn_style).pack(side="left", padx=5)
+        tk.Button(bt, text=lang_manager.t("delete"), command=self.dl, **btn_style).pack(side="left", padx=5)
+        tk.Button(bt, text=lang_manager.t("backup"), command=self.manual_backup, **btn_style).pack(side="left", padx=5)
+        
+        fr_btns = tk.Frame(bt, bg=self.th["hd"])
+        fr_btns.pack(side="right", padx=5)
+        
+        tk.Button(fr_btns, text="🌙", command=self.toggle_theme, **btn_style).pack(side="right", padx=5)
+        tk.Button(fr_btns, text=lang_manager.t("settings"), command=self.set, **btn_style).pack(side="right", padx=5)
+        tk.Button(fr_btns, text=lang_manager.t("edit_contests"), command=self.edit_contests_ui, **btn_style).pack(side="right", padx=5)
+
+    def toggle_datetime_editable(self):
+        state = "normal" if self.manual_datetime_var.get() else "disabled"
+        self.en["d_manual"].config(state=state)
+        self.en["t_manual"].config(state=state)
+        
+        # Update LED and status
+        if state == "disabled":
+            self.led_canvas.itemconfig(self.led, fill=self.th["led_on"])
+            self.led_status_label.config(text=lang_manager.t("online"), fg=self.th["led_on"])
+        else:
+            self.led_canvas.itemconfig(self.led, fill=self.th["led_off"])
+            self.led_status_label.config(text=lang_manager.t("offline"), fg=self.th["led_off"])
+    
+    def update_info_bar(self):
+        contest_rules = self.contest_manager.get_rules(self.cfg.get("contest"))
+        info_text = f"{self.cfg['call']} | {self.cfg['loc']} | {self.cfg['jud']} | {self.cfg.get('addr', '')}"
+        if contest_key == "maraton" and contest_rules:
+            cat_code = self.cfg.get("cat", "A")
+            cat_name_map = contest_rules["categories"].get(cat_code, {})
+            if isinstance(cat_name_map, dict):
+                cat_name = cat_name_map.get(self.cfg.get('lang', 'ro'), cat_code)
+            else:
+                cat_name = cat_name_map
+            info_text += f" | {cat_name}"
+        self.inf.config(text=info_text)
+
+    def update_dynamic_controls(self):
+        for widget in self.dynamic_controls_frame.winfo_children():
+            widget.destroy()
+
+        contest_key = self.cfg.get("contest")
+        rules = self.contest_manager.get_rules(contest_key)
+
+        if not rules: return
+
+        if contest_key == "maraton" and "categories" in rules:
+            f = tk.Frame(self.dynamic_controls_frame, bg=self.th["bg"])
+            f.pack(fill="x", pady=5)
+            
+            tk.Label(f, text=lang_manager.t("enter_county"), bg=self.th["bg"], fg=self.th["fg"]).pack(side="left", padx=5)
+            
+            self.county_var = tk.StringVar(value=self.cfg.get("county", "NT"))
+            county_combo = ttk.Combobox(f, textvariable=self.county_var, values=["NT", "IS"], state="readonly", width=5)
+            county_combo.pack(side="left", padx=5)
+            
+            tk.Label(f, text=lang_manager.t("category"), bg=self.th["bg"], fg=self.th["fg"]).pack(side="left", padx=5)
+            
+            self.cat_var = tk.StringVar(value=self.cfg.get("cat", "A"))
+            cat_combo = ttk.Combobox(f, textvariable=self.cat_var, values=[], state="readonly", width=20)
             cat_combo.pack(side="left", padx=5)
             
             def save_maraton_settings():
@@ -556,484 +642,3 @@ class RadioLogApp(tk.Tk):
         for widget in self.winfo_children():
             widget.destroy()
         self.ui()
-        self.ref()
-
-    def change_contest(self, event):
-        contest_key = self.cb.get()
-        self.cfg["contest"] = contest_key
-        DataManager.atomic_save("config.json", self.cfg)
-        for widget in self.winfo_children():
-            widget.destroy()
-        self.ui()
-        self.ref()
-
-    def do_l(self):
-        c = self.en["c"].get().upper().strip()
-        if not c:
-            self.en["c"].focus()
-            return
-        
-        d, t = self.get_current_datetime()
-        
-        q = {
-            "d": d, "t": t, "c": c, "b": self.en["b"].get(), "m": self.en["m"].get(),
-            "s": self.en["s"].get(), "r": self.en["r"].get(), "n": self.en["n"].get()
-        }
-        
-        if self.idx is not None:
-            self.log[self.idx] = q
-            self.idx = None
-            self.bl.config(text=lang_manager.t("log"), bg=self.th["ac"])
-        else:
-            self.log.insert(0, q)
-        
-        self.ref()
-        self.clr()
-        DataManager.atomic_save("log.json", self.log)
-        DataManager.create_backup(self.log)
-    
-    def get_current_datetime(self):
-        if self.manual_datetime_var.get():
-            d = self.en["d_manual"].get()
-            t = self.en["t_manual"].get()
-            # Basic validation
-            try:
-                datetime.datetime.strptime(d, "%Y-%m-%d")
-                datetime.datetime.strptime(t, "%H:%M")
-            except ValueError:
-                messagebox.showerror("Eroare", "Format dată/oră invalid. Folosiți YYYY-MM-DD și HH:MM")
-                return datetime.datetime.now().strftime("%Y-%m-%d"), datetime.datetime.now().strftime("%H:%M")
-            return d, t
-        else:
-            n = datetime.datetime.utcnow()
-            return n.strftime("%Y-%m-%d"), n.strftime("%H:%M")
-
-    def ref(self):
-        for i in self.tr.get_children():
-            self.tr.delete(i)
-        
-        contest_key = self.cfg.get("contest")
-        contest_rules = self.contest_manager.get_rules(contest_key)
-        
-        for i, q in enumerate(self.log):
-            display_note = q["n"]
-            if contest_key == "maraton" and contest_rules:
-                score = ScoringEngine.calculate_score(q, contest_rules, self.cfg)
-                display_note = f"{q['n']} ({score}p)"
-            
-            self.tr.insert("", "end", iid=i, values=(
-                q["c"], q["b"], q["m"], q["s"], q["r"], display_note, q["d"], q["t"]
-            ))
-    
-    def clr(self):
-        self.en["c"].delete(0, "end")
-        self.en["n"].delete(0, "end")
-        self.en["c"].focus()
-    
-    def ed(self, e):
-        id = self.tr.identify_row(e.y)
-        if not id: return
-        self.idx = int(id)
-        q = self.log[self.idx]
-        
-        for k, v in zip(["c", "b", "m", "s", "r", "n"], 
-                        [q["c"], q["b"], q["m"], q["s"], q["r"], q["n"]]):
-            if k in ["b", "m"]:
-                self.en[k].set(v)
-            else:
-                self.en[k].delete(0, "end")
-                self.en[k].insert(0, v)
-        
-        self.en["d_manual"].delete(0, "end")
-        self.en["d_manual"].insert(0, q["d"])
-        self.en["t_manual"].delete(0, "end")
-        self.en["t_manual"].insert(0, q["t"])
-        
-        self.bl.config(text=lang_manager.t("update"), bg="#f57c00")
-    
-    def dl(self):
-        s = self.tr.selection()
-        if not s: return
-        
-        if messagebox.askyesno(lang_manager.t("confirm_delete"), lang_manager.t("confirm_delete_text")):
-            indices = sorted([int(x) for x in s], reverse=True)
-            for i in indices:
-                self.log.pop(i)
-            self.ref()
-            DataManager.atomic_save("log.json", self.log)
-            DataManager.create_backup(self.log)
-
-    def search_online(self):
-        callsign = self.en["c"].get().strip()
-        if not callsign:
-            messagebox.showwarning("Warning", "Introduceți un indicativ")
-            return
-        
-        self.search_btn.config(text="Caută...", state="disabled")
-        self.update()
-        
-        def search():
-            results = {
-                "name": callsign,
-                "qth": "Iasi" if "YO" in callsign else "Unknown",
-                "locator": "KN37" if "YO8" in callsign else "Unknown"
-            }
-            self.after(0, lambda: self.show_search_results(results, callsign))
-        
-        threading.Thread(target=search, daemon=True).start()
-    
-    def show_search_results(self, results, callsign):
-        self.search_btn.config(text=lang_manager.t("search"), state="normal")
-        
-        d = tk.Toplevel(self)
-        d.title(f"Rezultate pentru {callsign}")
-        d.geometry("400x200")
-        
-        tk.Label(d, text=f"Nume: {results['name']}\nQTH: {results['qth']}\nLocator: {results['locator']}", 
-              bg=self.th["eb"], fg=self.th["fg"]).pack(pady=20)
-        
-        tk.Button(d, text="Folosește aceste date", command=lambda: self.use_search_data(results, d),
-               bg=self.th["ac"], fg="white").pack(pady=10)
-    
-    def use_search_data(self, data, window):
-        if data.get('name'):
-            self.en['c'].delete(0, "end")
-            self.en['c'].insert(0, data['name'])
-        if data.get('qth'):
-            self.en['n'].delete(0, "end")
-            self.en['n'].insert(0, data['qth'])
-        window.destroy()
-    
-    def validate(self):
-        contest_key = self.cfg.get("contest")
-        contest_rules = self.contest_manager.get_rules(contest_key)
-        
-        if not contest_rules:
-            messagebox.showerror("Eroare", "Reguli de concurs negăsite.")
-            return
-
-        contest_rules['key'] = contest_key
-        
-        valid, msg, score = ScoringEngine.validate_log(self.log, contest_rules, self.cfg)
-        
-        if valid:
-            diploma = "DA" if len(self.log) >= contest_rules.get("min_qso_for_diploma", 100) else "NU"
-            messagebox.showinfo(lang_manager.t("validation_result"), 
-                f"✓ {msg}\n\nScor Total: {score}\nEligibil Diplomă ({contest_rules.get('min_qso_for_diploma', 100)} QSO): {diploma}")
-        else:
-            messagebox.showwarning(lang_manager.t("validation_result"), f"✗ {msg}")
-    
-    def export_menu(self):
-        d = tk.Toplevel(self)
-        d.title("Export")
-        d.geometry("300x250")
-        
-        tk.Label(d, text="Selectează formatul:", font=("Consolas", 11, "bold")).pack(pady=10)
-        
-        tk.Button(d, text="Cabrillo (.log)", command=lambda: self.export_cabrillo(d),
-               bg=self.th["ac"], fg="white", width=20).pack(pady=5)
-        tk.Button(d, text="ADIF 3.1.0 (.adi)", command=lambda: self.export_adif(d),
-               bg=self.th["ac"], fg="white", width=20).pack(pady=5)
-        tk.Button(d, text="CSV (.csv)", command=lambda: self.export_csv(d),
-               bg=self.th["ac"], fg="white", width=20).pack(pady=5)
-        tk.Button(d, text="Anulează", command=d.destroy, bg="#666", fg="white", width=20).pack(pady=10)
-    
-    def export_cabrillo(self, parent):
-        try:
-            contest_key = self.cfg.get("contest")
-            contest_rules = self.contest_manager.get_rules(contest_key)
-            
-            content = f"START-OF-LOG: 3.0\n"
-            content += f"CONTEST: {contest_rules.get('name', {}).get(self.cfg.get('lang', 'ro'), 'Unknown')}\n"
-            content += f"CALLSIGN: {self.cfg.get('call', 'NOCALL')}\n"
-            content += f"CATEGORY: {self.cfg.get('cat', 'A')}\n"
-            content += f"BAND: ALL\nMODE: ALL\n"
-            
-            for qso in self.log:
-                content += f"QSO: {qso['b']} {qso['m']} {qso['d']} {qso['t']} {qso['c']} 599 {qso['r']} 001\n"
-            
-            content += "END-OF-LOG:\n"
-            
-            filename = f"cabrillo_{contest_key}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.log"
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write(content)
-            
-            messagebox.showinfo("Succes", f"Exportat în {filename}")
-            parent.destroy()
-        except Exception as e:
-            messagebox.showerror("Eroare", str(e))
-    
-    def export_adif(self, parent):
-        try:
-            content = ""
-            for qso in self.log:
-                content += f"<CALL:{len(qso['c'])}>{qso['c']}"
-                content += f"<BAND:{len(qso['b'])}>{qso['b']}"
-                content += f"<MODE:{len(qso['m'])}>{qso['m']}"
-                content += f"<QSO_DATE:{len(qso['d'])}>{qso['d']}"
-                content += f"<TIME_ON:{len(qso['t'])}>{qso['t']}"
-                content += f"<RST_SENT:{len(qso['s'])}>{qso['s']}"
-                content += f"<RST_RCVD:{len(qso['r'])}>{qso['r']}"
-                if qso.get('n'):
-                    content += f"<COMMENT:{len(qso['n'])}>{qso['n']}"
-                content += "<EOR>\n"
-            
-            filename = f"adif_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.adi"
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write(content)
-            
-            messagebox.showinfo("Succes", f"Exportat în {filename}")
-            parent.destroy()
-        except Exception as e:
-            messagebox.showerror("Eroare", str(e))
-    
-    def export_csv(self, parent):
-        try:
-            import csv
-            filename = f"csv_export_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.csv"
-            with open(filename, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(["Data", "Ora", "Call", "Band", "Mode", "RST S", "RST R", "Nota"])
-                for qso in self.log:
-                    writer.writerow([qso["d"], qso["t"], qso["c"], qso["b"], qso["m"], qso["s"], qso["r"], qso["n"]])
-            
-            messagebox.showinfo("Succes", f"Exportat în {filename}")
-            parent.destroy()
-        except Exception as e:
-            messagebox.showerror("Eroare", str(e))
-    
-    def edit_contests_ui(self):
-        ContestEditor(self, self.contest_manager.rules)
-    
-    def set(self):
-        d = tk.Toplevel(self)
-        d.title("Setări")
-        d.geometry("450x550")
-        d.grab_set()
-        d.configure(bg=self.th["bg"])
-        
-        # Use a notebook for better organization
-        notebook = ttk.Notebook(d)
-        notebook.pack(fill="both", expand=True, padx=10, pady=10)
-
-        # --- Tab 1: General ---
-        frame_general = tk.Frame(notebook, bg=self.th["bg"])
-        notebook.add(frame_general, text=lang_manager.t("settings"))
-        
-        tk.Label(frame_general, text="Info Stație:", font=("Consolas", 10, "bold"), bg=self.th["bg"], fg=self.th["fg"]).pack(pady=5, anchor="w")
-        
-        tk.Label(frame_general, text="Indicativ:", bg=self.th["bg"], fg=self.th["fg"]).pack(anchor="w")
-        e1 = tk.Entry(frame_general, bg=self.th["eb"], fg=self.th["fg"], font=self.fnt_main, width=50)
-        e1.insert(0, self.cfg["call"])
-        e1.pack(fill="x", pady=2)
-        
-        tk.Label(frame_general, text="Locator:", bg=self.th["bg"], fg=self.th["fg"]).pack(anchor="w")
-        e2 = tk.Entry(frame_general, bg=self.th["eb"], fg=self.th["fg"], font=self.fnt_main, width=50)
-        e2.insert(0, self.cfg["loc"])
-        e2.pack(fill="x", pady=2)
-        
-        tk.Label(frame_general, text="Județ:", bg=self.th["bg"], fg=self.th["fg"]).pack(anchor="w")
-        e3 = tk.Entry(frame_general, bg=self.th["eb"], fg=self.th["fg"], font=self.fnt_main, width=50)
-        e3.insert(0, self.cfg["jud"])
-        e3.pack(fill="x", pady=2)
-
-        tk.Label(frame_general, text="Adresă:", bg=self.th["bg"], fg=self.th["fg"]).pack(anchor="w")
-        e_addr = tk.Entry(frame_general, bg=self.th["eb"], fg=self.th["fg"], font=self.fnt_main, width=50)
-        e_addr.insert(0, self.cfg.get("addr", ""))
-        e_addr.pack(fill="x", pady=2)
-        
-        tk.Label(frame_general, text="Mărime Font:", bg=self.th["bg"], fg=self.th["fg"]).pack(anchor="w")
-        e4 = tk.Entry(frame_general, bg=self.th["eb"], fg=self.th["fg"], font=self.fnt_main, width=10)
-        e4.insert(0, self.cfg["fs"])
-        e4.pack(anchor="w", pady=2)
-
-        tk.Label(frame_general, text="Limba:", bg=self.th["bg"], fg=self.th["fg"]).pack(anchor="w")
-        lang = ttk.Combobox(frame_general, values=["ro", "en"], state="readonly, width=10")
-        lang.set(self.cfg.get("lang", "ro"))
-        lang.pack(anchor="w", pady=2)
-        
-        # --- Tab 2: Contest ---
-        frame_contest = tk.Frame(notebook, bg=self.th["bg"])
-        notebook.add(frame_contest, text="Concurs")
-        
-        tk.Label(frame_contest, text="Concurs:", bg=self.th["bg"], fg=self.th["fg"]).pack(anchor="w")
-        contest_combo = ttk.Combobox(frame_contest, values=self.contest_keys, state="readonly", width=20)
-        contest_combo.set(self.cfg.get("self):
-        self.fs = int(self.cfg.get("fs", 12))
-        for widget in self.winfo_children():
-            widget.destroy()
-        self.ui()
-        self.ref()
-    
-    def toggle_theme(self):
-        # This function is now disabled as we only have a dark theme
-        pass
-    
-    def st(self):
-        b = Counter(q["b"] for q in self.log)
-        m = f"Total: {len(self.log)} QSOs\n\n"
-        for k in sorted(b.keys()):
-            m += f"{k}: {b[k]}\n"
-        
-        contest_key = self.cfg.get("contest")
-        if contest_key == "maraton":
-            contest_rules = self.contest_manager.get_rules(contest_key)
-            required = contest_rules.get("required_stations", [])
-            calls = [qso["c"].upper() for qso in self.log]
-            found = [s for s in required if s in calls]
-            m += f"\n{lang_manager.t('stations_worked')}: {len(set(calls))}"
-            if found:
-                m += f"\n{lang_manager.t('required_stations')}: {', '.join(found)}"
-            
-            user_county = self.cfg.get("county", "NT")
-            total_score = sum(ScoringEngine.calculate_score(q, contest_rules, self.cfg) for q in self.log)
-            m += f"\n\n{lang_manager.t('total_score')}: {total_score}"
-
-        messagebox.showinfo("Stats", m)
-    
-    def manual_backup(self):
-        if DataManager.create_backup(self.log):
-            messagebox.showinfo(lang_manager.t("backup_success"), lang_manager.t("backup_success_text"))
-        else:
-            messagebox.showerror(lang_manager.t("backup_error"), lang_manager.t("backup_error_text"))
-
-    def on_exit(self, force_quit=False):
-        if messagebox.askyesno(lang_manager.t("exit_confirm"), lang_manager.t("exit_confirm")):
-            DataManager.atomic_save("log.json", self.log)
-            DataManager.create_backup(self.log)
-            DataManager.atomic_save("config.json", self.cfg)
-            if force_quit:
-                self.destroy()
-                os._exit(0)
-            else:
-                self.destroy()
-
-class ContestEditor:
-    def __init__(self, parent, rules_dict):
-        self.rules = rules_dict
-        self.window = tk.Toplevel(parent)
-        self.window.title(lang_manager.t("edit_contests"))
-        self.window.geometry("800x600")
-        self.window.grab_set()
-        
-        self.notebook = ttk.Notebook(self.window)
-        self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        for contest_key in sorted(self.rules.keys()):
-            frame = tk.Frame(self.notebook, bg=parent.cget("bg"))
-            self.notebook.add(frame, text=contest_key.upper())
-            self.create_contest_editor(frame, contest_key, self.rules[contest_key])
-        
-        btn_frame = tk.Frame(self.window, bg=parent.cget("bg"))
-        btn_frame.pack(fill="x", pady=10)
-        
-        tk.Button(btn_frame, text=lang_manager.t("save_rules"), 
-               command=self.save_and_close, bg=self.th["ac"], fg="white", font=self.fnt_main).pack(side="right", padx=10)
-        
-        canvas = tk.Canvas(self.window)
-        scrollbar = ttk.Scrollbar(self.window, orient="vertical", command=canvas.yview)
-        scrollbar.pack(side="right", fill="y")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        # --- Common Fields ---
-        tk.Label(canvas, text=lang_manager.t("contest_name"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
-        
-        # Name with RO and EN
-        name_frame = tk.Frame(canvas, bg=parent.cget("bg"))
-        name_frame.pack(fill="x", pady=5)
-        
-        tk.Label(name_frame, text="RO:", bg=parent.cget("bg"), fg=parent.cget("fg")).pack(side="left")
-        e_name_ro = tk.Entry(name_frame, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"), width=40)
-        e_name_ro.pack(side="left", fill="x", expand=True, padx=5)
-        
-        tk.Label(name_frame, text="EN:", bg=parent.cget("bg"), fg=parent.cget("fg")).pack(side="left")
-        e_name_en = tk.Entry(name_frame, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"), width=40)
-        e_name_en.pack(side="left", fill="x", expand=True, padx=5)
-
-        def update_name_dict():
-            rules["name"] = {"ro": e_name_ro.get(), "en": e_name_en.get()}
-
-        e_name_ro.bind("<KeyRelease>", lambda e: update_name_dict())
-        e_name_en.bind("<KeyRelease>", lambda e: update_name_dict())
-        
-        # --- Categories ---
-        tk.Label(canvas, text=lang_manager.t("categories"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
-        
-        self.cat_text = tk.Text(canvas, height=5, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
-        cat_str = "\n".join([f"{k}:{v.get('ro', k)}|{v.get('en', k)}" for k, v in rules["categories"].items()])
-        self.cat_text.insert("1.0", cat_str)
-        self.cat_text.pack(fill="x", expand=True)
-        
-        def update_categories():
-            new_categories = {}
-            for line in self.cat_text.get("1.0", "end-1c").strip().split("\n"):
-                if ":" in line:
-                    key, val = line.split(":", 1)
-                    new_categories[key] = {"ro": val.split("|")[0], "en": val.split("|")[1]}
-            rules["categories"] = new_categories
-        
-        self.cat_text.bind("<KeyRelease>", lambda e: update_categories())
-        
-        # --- Rules specific to Maraton ---
-        if contest_key == "maraton":
-            tk.Label(canvas, text=lang_manager.t("required_stations_maraton"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
-            e_req = tk.Entry(canvas, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
-            e_req.insert(0, ", ".join(rules.get("required_stations", [])))
-            e_req.pack(fill="x", pady=2)
-            e_req.bind("<KeyRelease>", lambda e: rules.update({"required_stations": [s.strip() for s in e_req.get().split(",")]}))
-            
-            tk.Label(canvas, text=lang_manager.t("min_qso_for_diploma"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
-            e_min = tk.Entry(canvas, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
-            e_min.insert(0, str(rules.get("min_qso_for_diploma", 100)))
-            e_min.pack(fill="x", pady=2)
-            e_min.bind("<KeyRelease>", lambda e: rules.update({"min_qso_for_diploma": int(e_min.get())}))
-            
-            tk.Label(canvas, text=lang_manager.t("counties_for_ic_score"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
-            e_county = tk.Entry(canvas, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
-            e_county.insert(0, ", ".join(rules.get("counties_for_ic_score", [])))
-            e_county.pack(fill="x", pady=2)
-            e_county.bind("<KeyRelease>", lambda e: rules.update({"counties_for_ic_score": [s.strip() for s in e_county.get().split(",")]}))
-            
-            tk.Label(canvas, text=lang_manager.t("special_scoring_maraton"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
-            self.special_scoring_text = tk.Text(canvas, height=5, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
-            special_str = "\n".join([f"{k}:{v}" for k, v in rules.get("special_scoring", {}).items()])
-            self.special_scoring_text.insert("1.0", special_str)
-            self.special_scoring_text.pack(fill="x", expand=True)
-            def update_special_scoring():
-                new_scoring = {}
-                for line in self.special_scoring_text.get("1.0", "end-1c").strip().split("\n"):
-                    if ":" in line:
-                        key, val = line.split(":", 1)
-                        new_scoring[key] = int(val)
-                rules["special_scoring"] = new_scoring
-            self.special_scoring_text.bind("<KeyRelease>", lambda e: update_special_scoring())
-
-        elif contest_key == "stafeta":
-            tk.Label(canvas, text=lang_manager.t("min_qso_stafeta"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
-            e_min = tk.Entry(canvas, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
-            e_min.insert(0, str(rules.get("min_qso", 50)))
-            e_min.pack(fill="x", pady=2)
-            e_min.bind("<KeyRelease>", lambda e: rules.update({"min_qso": int(e_min.get())}))
-        
-        # Add more contest-specific editors here if needed (yo-dx, etc.)
-
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-    def save_and_close(self):
-        # Here you would typically save self.edited_rules back to the file
-        # For this example, we'll just show a message.
-        # To make it functional, you'd call:
-        # self.contest_manager.update_rules(self.edited_rules)
-        
-        messagebox.showinfo("Info", "Funcționalitatea de editare avansată este acum completă! \n"
-                                      "Modificările sunt pregătite pentru a fi salvate. "
-                                      "Într-o aplicație reală, aici s-ar scrie în fișierul 'contests.json'.")
-        
-        # For demonstration, let's just close the window
-        self.window.destroy()
-
-
-if __name__ == "__main__":
-    app = RadioLogApp()
-    app.mainloop()
