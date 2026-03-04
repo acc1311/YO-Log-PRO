@@ -21,7 +21,7 @@
 ### Funcționalități principale
 
 - **Înregistrare QSO rapidă** — Introduci indicativul, banda, modul și apeși ENTER sau butonul LOG
-- **Multi-concurs** — Suport pentru Maraton Ion Creangă, Cupa Moldovei (Stafeta), YO-DX-HF și Log Simplu
+- **Multi-concurs** — Suport pentru Maraton Ion Creangă, Cupa Moldovei, Ștafetă, YO-DX-HF și Log Simplu
 - **Calcul punctaj automat** — Reguli specifice per concurs, inclusiv stații cu punctaj special pentru Maraton
 - **Validare log** — Verifică stațiile obligatorii, numărul minim de QSO-uri și eligibilitatea pentru diplomă
 - **Export multiple formate** — Cabrillo (`.log`), ADIF (`.adi`), CSV (`.csv`)
@@ -36,7 +36,7 @@
 | Cheie         | Nume                         | Mod scoring       |
 |---------------|------------------------------|--------------------|
 | `maraton`     | Maraton Ion Creangă          | Maraton (special) |
-| `stafeta`     | Cupa Moldovei (Stafeta)      | Standard          |
+| `stafeta`     | Cupa Tomisului               | Standard          |
 | `yo-dx`       | YO-DX-HF                     | Standard          |
 | `log_simplu`  | Log Simplu                   | Fără              |
 
@@ -132,7 +132,7 @@ Toate fișierele sunt salvate în **același director** cu executabilul sau scri
 | Key           | Name                         | Scoring mode      |
 |---------------|------------------------------|-------------------|
 | `maraton`     | Marathon Ion Creangă         | Maraton (special) |
-| `stafeta`     | Moldova Cup (Relay)          | Standard          |
+| `stafeta`     | Tomis Cup (Relay)            | Standard          |
 | `yo-dx`       | YO-DX-HF                     | Standard          |
 | `log_simplu`  | Simple Log                   | None              |
 
