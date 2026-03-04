@@ -886,7 +886,7 @@ class RadioLogApp(tk.Tk):
             filename = f"csv_export_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.csv"
             with open(filename, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerow(["Data", "Ora", "Call", "Band", "Mode", "RST_S", "RST_R", "Nota"])
+                writer.writerow(["Data", "Ora", "Call", "Band", "Mode", "RST S", "RST R", "Nota"])
                 for qso in self.log:
                     writer.writerow([qso["d"], qso["t"], qso["c"], qso["b"], qso["m"], qso["s"], qso["r"], qso["n"]])
             
@@ -935,8 +935,6 @@ class RadioLogApp(tk.Tk):
         e_addr.insert(0, self.cfg.get("addr", ""))
         e_addr.pack(fill="x", pady=2)
         
-        tk.Label(frame_general, text="Afisare:", font=("Consolas", 10, "bold"), bg=self.th["bg"], fg=self.th["fg"]).pack(pady=5, anchor="w")
-        
         tk.Label(frame_general, text="Mărime Font:", bg=self.th["bg"], fg=self.th["fg"]).pack(anchor="w")
         e4 = tk.Entry(frame_general, bg=self.th["eb"], fg=self.th["fg"], font=self.fnt_main, width=10)
         e4.insert(0, self.cfg["fs"])
@@ -970,28 +968,31 @@ class RadioLogApp(tk.Tk):
         
         contest_combo.bind("<<ComboboxSelected>>", update_cat_combo)
         lang.bind("<<ComboboxSelected>>", update_cat_combo) # Also update on lang change
-        update_cat_combo() # Initial population
+        update_cat_combo()
 
         # --- Tab 3: Advanced ---
         frame_advanced = tk.Frame(notebook, bg=self.th["bg"])
         notebook.add(frame_advanced, text="Avansat")
 
-        tk.Label(frame_advanced, text=lang_manager.t("manual_mode"), font=("Consolas", 10, "bold"), bg=self.th["bg"], fg=self.th["fg"]).pack(pady=5, anchor="w")
-        chk_manual_settings = tk.Checkbutton(frame_advanced, text="Activează setare manuală Dată/Oră", 
+        tk.Label(frame_advanced, text="Mod Manual:", font=("Consolas", 10, "bold"), bg=self.th["bg"], fg=self.th["fg"]).pack(pady=5, anchor="w")
+        chk_manual_settings = tk.Checkbutton(frame_advanced, text="Activează setarea manuală a Datei/Orei", 
                                            variable=self.manual_datetime_var, bg=self.th["bg"], fg=self.th["fg"],
-                                           selectcolor=self.th["eb"])
+                                           selectcolor=self.th["eb"], activebackground=self.th["bg"], activeforeground=self.th["fg"])
         chk_manual_settings.pack(anchor="w")
 
         def sv():
             # Retrieve all values before saving
             new_call = e1.get().upper()
+            new_loc = e2.get().upper()
+            new_jud = e3.get().upper()
+            new_addr = e_addr.get()
             new_fs = int(e4.get()) if e4.get().isdigit() else self.cfg["fs"]
             
             self.cfg.update({
                 "call": new_call,
-                "loc": e2.get().upper(),
-                "jud": e3.get().upper(),
-                "addr": e_addr.get(),
+                "loc": new_loc,
+                "jud": new_jud,
+                "addr": new_addr,
                 "fs": new_fs,
                 "contest": contest_combo.get(),
                 "lang": lang.get(),
@@ -1037,7 +1038,7 @@ class RadioLogApp(tk.Tk):
         if contest_key == "maraton":
             contest_rules = self.contest_manager.get_rules(contest_key)
             required = contest_rules.get("required_stations", [])
-            calls = [qso["c"] for qso in self.log]
+            calls = [qso["c"].upper() for qso in self.log]
             found = [s for s in required if s in calls]
             m += f"\n{lang_manager.t('stations_worked')}: {len(set(calls))}"
             if found:
@@ -1075,7 +1076,37 @@ class ContestEditor:
         self.window.grab_set()
         
         self.notebook = ttk.Notebook(self.window)
-        self.notebook.pack(fill="both", expand=True, padx=10insert(0, rules.get("name", {}).get("en", ""))
+        self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        for contest_key in sorted(self.rules.keys()):
+            frame = tk.Frame(self.notebook, bg=parent.cget("bg"))
+            self.notebook.add(frame, text=contest_key.upper())
+            self.create_contest_editor(frame, contest_key, self.rules[contest_key])
+        
+        btn_frame = tk.Frame(self.window, bg=parent.cget("bg"))
+        btn_frame.pack(fill="x", pady=10)
+        
+        tk.Button(btn_frame, text=lang_manager.t("save_rules"), 
+               command=self.save_and_close, bg=self.th["ac"], fg="white", font=self.fnt_main).pack(side="right", padx=10)
+        
+        canvas = tk.Canvas(self.window)
+        scrollbar = ttk.Scrollbar(self.window, orient="vertical", command=canvas.yview)
+        scrollbar.pack(side="right", fill="y")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # --- Common Fields ---
+        tk.Label(canvas, text=lang_manager.t("contest_name"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
+        
+        # Name with RO and EN
+        name_frame = tk.Frame(canvas, bg=parent.cget("bg"))
+        name_frame.pack(fill="x", pady=5)
+        
+        tk.Label(name_frame, text="RO:", bg=parent.cget("bg"), fg=parent.cget("fg")).pack(side="left")
+        e_name_ro = tk.Entry(name_frame, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"), width=40)
+        e_name_ro.pack(side="left", fill="x", expand=True, padx=5)
+        
+        tk.Label(name_frame, text="EN:", bg=parent.cget("bg"), fg=parent.cget("fg")).pack(side="left")
+        e_name_en = tk.Entry(name_frame, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"), width=40)
         e_name_en.pack(side="left", fill="x", expand=True, padx=5)
 
         def update_name_dict():
@@ -1083,12 +1114,12 @@ class ContestEditor:
 
         e_name_ro.bind("<KeyRelease>", lambda e: update_name_dict())
         e_name_en.bind("<KeyRelease>", lambda e: update_name_dict())
-
-        # --- Categories ---
-        tk.Label(scrollable_frame, text=lang_manager.t("categories"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
         
-        self.cat_text = tk.Text(scrollable_frame, height=8, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
-        cat_str = "\n".join([f"{k}:{v.get('ro', k')}|{v.get('en', k')}" for k, v in rules.get("categories", {}).items()])
+        # --- Categories ---
+        tk.Label(canvas, text=lang_manager.t("categories"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
+        
+        self.cat_text = tk.Text(canvas, height=5, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
+        cat_str = "\n".join([f"{k}:{v.get('ro', k)}|{v.get('en', k)}" for k, v in rules["categories"].items()])
         self.cat_text.insert("1.0", cat_str)
         self.cat_text.pack(fill="x", expand=True)
         
@@ -1104,22 +1135,26 @@ class ContestEditor:
         
         # --- Rules specific to Maraton ---
         if contest_key == "maraton":
-            tk.Label(scrollable_frame, text=lang_manager.t("required_stations_maraton"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
-            e_req = tk.Entry(scrollable_frame, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
-            e_req.insert(0, ", ".join(rules., "bold")).pack(pady=5, anchor="w")
-            e_min = tk.Entry(scrollable_frame, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
+            tk.Label(canvas, text=lang_manager.t("required_stations_maraton"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
+            e_req = tk.Entry(canvas, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
+            e_req.insert(0, ", ".join(rules.get("required_stations", [])))
+            e_req.pack(fill="x", pady=2)
+            e_req.bind("<KeyRelease>", lambda e: rules.update({"required_stations": [s.strip() for s in e_req.get().split(",")]}))
+            
+            tk.Label(canvas, text=lang_manager.t("min_qso_for_diploma"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
+            e_min = tk.Entry(canvas, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
             e_min.insert(0, str(rules.get("min_qso_for_diploma", 100)))
             e_min.pack(fill="x", pady=2)
             e_min.bind("<KeyRelease>", lambda e: rules.update({"min_qso_for_diploma": int(e_min.get())}))
             
-            tk.Label(scrollable_frame, text=lang_manager.t("counties_for_ic_score"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
-            e_county = tk.Entry(scrollable_frame, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
+            tk.Label(canvas, text=lang_manager.t("counties_for_ic_score"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
+            e_county = tk.Entry(canvas, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
             e_county.insert(0, ", ".join(rules.get("counties_for_ic_score", [])))
             e_county.pack(fill="x", pady=2)
             e_county.bind("<KeyRelease>", lambda e: rules.update({"counties_for_ic_score": [s.strip() for s in e_county.get().split(",")]}))
             
-            tk.Label(scrollable_frame, text=lang_manager.t("special_scoring_maraton"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
-            self.special_scoring_text = tk.Text(scrollable_frame, height=5, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
+            tk.Label(canvas, text=lang_manager.t("special_scoring_maraton"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
+            self.special_scoring_text = tk.Text(canvas, height=5, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
             special_str = "\n".join([f"{k}:{v}" for k, v in rules.get("special_scoring", {}).items()])
             self.special_scoring_text.insert("1.0", special_str)
             self.special_scoring_text.pack(fill="x", expand=True)
@@ -1133,8 +1168,8 @@ class ContestEditor:
             self.special_scoring_text.bind("<KeyRelease>", lambda e: update_special_scoring())
 
         elif contest_key == "stafeta":
-            tk.Label(scrollable_frame, text=lang_manager.t("min_qso_stafeta"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
-            e_min = tk.Entry(scrollable_frame, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
+            tk.Label(canvas, text=lang_manager.t("min_qso_stafeta"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
+            e_min = tk.Entry(canvas, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
             e_min.insert(0, str(rules.get("min_qso", 50)))
             e_min.pack(fill="x", pady=2)
             e_min.bind("<KeyRelease>", lambda e: rules.update({"min_qso": int(e_min.get())}))
