@@ -4,8 +4,6 @@
 YO Log PRO v16.0 FINAL — Professional Multi-Contest Amateur Radio Logger
 Developed by: Ardei Constantin-Cătălin (YO8ACR)
 Email: yo8acr@gmail.com
-
-FINAL EDITION — All features, all fixes, production-ready.
 """
 
 import os
@@ -32,7 +30,6 @@ try:
 except ImportError:
     HAS_SOUND = False
 
-
 # =============================================================================
 # UTILITIES
 # =============================================================================
@@ -41,7 +38,6 @@ def get_data_dir():
     if getattr(sys, 'frozen', False):
         return os.path.dirname(sys.executable)
     return os.path.abspath(".")
-
 
 def beep(kind="info"):
     if not HAS_SOUND:
@@ -52,9 +48,8 @@ def beep(kind="info"):
     except:
         pass
 
-
 # =============================================================================
-# LOCATOR UTILITIES (Maidenhead + Haversine)
+# LOCATOR UTILITIES
 # =============================================================================
 
 class Loc:
@@ -101,7 +96,6 @@ class Loc:
             return (s[0:2].isalpha() and s[2:4].isdigit() and s[4:6].isalpha() and
                     'A' <= s[0] <= 'R' and 'A' <= s[1] <= 'R' and 'A' <= s[4] <= 'X' and 'A' <= s[5] <= 'X')
         return False
-
 
 # =============================================================================
 # DXCC DATABASE (150+ prefixes)
@@ -226,7 +220,6 @@ class DXCC:
         _, p = DXCC.lookup(call)
         return p
 
-
 # =============================================================================
 # FREQUENCY UTILITIES
 # =============================================================================
@@ -251,7 +244,6 @@ RST_DEFAULTS = {
     "DIGI": "599", "FT8": "-10", "FT4": "-10", "JT65": "-15", "SSTV": "59",
 }
 
-
 def freq2band(f):
     try:
         f = float(f)
@@ -261,7 +253,6 @@ def freq2band(f):
     except:
         pass
     return None
-
 
 # =============================================================================
 # CONSTANTS
@@ -471,7 +462,6 @@ TH = {
     "alt": "#0d1f2d", "gold": "#ffd700", "cyan": "#58a6ff",
 }
 
-
 # =============================================================================
 # DATA MANAGER
 # =============================================================================
@@ -543,7 +533,6 @@ class DM:
         except:
             return False
 
-
 # =============================================================================
 # LANGUAGE
 # =============================================================================
@@ -563,7 +552,6 @@ class L:
     @classmethod
     def t(cls, k):
         return T.get(cls._c, {}).get(k, k)
-
 
 # =============================================================================
 # SCORING ENGINE
@@ -710,7 +698,6 @@ class Score:
         _, _, tot = Score.total(data, rules, cfg)
         return True, f"✓ OK! {len(data)} QSO, Scor: {tot}", tot
 
-
 # =============================================================================
 # IMPORT ENGINE
 # =============================================================================
@@ -781,7 +768,6 @@ class Importer:
             qsos.append(q)
         return qsos
 
-
 # =============================================================================
 # CONTEST EDITOR
 # =============================================================================
@@ -807,10 +793,17 @@ class ContestEditor(tk.Toplevel):
         self.configure(bg=TH["bg"])
         self.transient(parent)
         self.grab_set()
-        self._build()
+        
+        # Center Window Fix
         self.update_idletasks()
-        self.geometry(
-            f"+{(self.winfo_screenwidth() - 700) // 2}+{(self.winfo_screenheight() - 850) // 2}")
+        w, h = 700, 850
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        x = (sw - w) // 2
+        y = (sh - h) // 2
+        self.geometry(f"{w}x{h}+{x}+{y}")
+
+        self._build()
 
     def _build(self):
         cv = tk.Canvas(self, bg=TH["bg"], highlightthickness=0)
@@ -998,7 +991,6 @@ class ContestEditor(tk.Toplevel):
         self.result = (self.cid, self.d)
         self.destroy()
 
-
 # =============================================================================
 # CONTEST MANAGER
 # =============================================================================
@@ -1013,11 +1005,18 @@ class ContestMgr(tk.Toplevel):
         self.configure(bg=TH["bg"])
         self.transient(parent)
         self.grab_set()
+        
+        # Center Window
+        self.update_idletasks()
+        w, h = 760, 500
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        x = (sw - w) // 2
+        y = (sh - h) // 2
+        self.geometry(f"{w}x{h}+{x}+{y}")
+
         self._build()
         self._fill()
-        self.update_idletasks()
-        self.geometry(
-            f"+{(self.winfo_screenwidth() - 760) // 2}+{(self.winfo_screenheight() - 500) // 2}")
 
     def _build(self):
         tb = tk.Frame(self, bg=TH["header_bg"], pady=5)
@@ -1152,7 +1151,6 @@ class ContestMgr(tk.Toplevel):
         self.result = self.c
         self.destroy()
 
-
 # =============================================================================
 # STATISTICS WINDOW
 # =============================================================================
@@ -1164,6 +1162,15 @@ class StatsWindow(tk.Toplevel):
         self.geometry("600x700")
         self.configure(bg=TH["bg"])
         self.transient(parent)
+        
+        # Center Window
+        self.update_idletasks()
+        w, h = 600, 700
+        sw = self.winfo_screenwidth()
+        sh = self.winfo_screenheight()
+        x = (sw - w) // 2
+        y = (sh - h) // 2
+        self.geometry(f"{w}x{h}+{x}+{y}")
 
         tf = tk.Frame(self, bg=TH["bg"])
         tf.pack(fill="both", expand=True, padx=10, pady=5)
@@ -1274,7 +1281,6 @@ class StatsWindow(tk.Toplevel):
                   bg=TH["accent"], fg="white", font=("Consolas", 11),
                   width=12, cursor="hand2").pack(pady=8)
 
-
 # =============================================================================
 # MAIN APPLICATION
 # =============================================================================
@@ -1307,7 +1313,7 @@ class App(tk.Tk):
         self._sort_col = None
         self._sort_rev = False
 
-        # *** FIX: Initialize ALL widget references to None BEFORE building UI ***
+        # Initialize widget references
         self.info_lbl = None
         self.sc_lbl = None
         self.clk = None
@@ -1337,7 +1343,8 @@ class App(tk.Tk):
 
         # Bindings
         self.protocol("WM_DELETE_WINDOW", self._exit)
-        self.bind('<Return>', self._on_enter)
+        # FIX: Global Enter binding to force logging
+        self.bind('<Return>', lambda e: self._add_qso())
         self.bind('<Control-f>', lambda e: self._search_dlg())
         self.bind('<Control-F>', lambda e: self._search_dlg())
         self.bind('<Control-z>', lambda e: self._undo())
@@ -1383,16 +1390,24 @@ class App(tk.Tk):
                 self.geometry("1220x780")
         else:
             w, h = 1220, 780
-            self.geometry(
-                f"{w}x{h}+{(self.winfo_screenwidth() - w) // 2}+{(self.winfo_screenheight() - h) // 2}")
+            sw = self.winfo_screenwidth()
+            sh = self.winfo_screenheight()
+            x = (sw - w) // 2
+            y = (sh - h) // 2
+            self.geometry(f"{w}x{h}+{x}+{y}")
+        
         self.minsize(1000, 640)
+        self.resizable(True, True) # FIX: Allow resizing
 
     def _setup_style(self):
         self.fs = int(self.cfg.get("fs", 11))
         self.fn = ("Consolas", self.fs)
         self.fb = ("Consolas", self.fs, "bold")
         s = ttk.Style()
-        s.theme_use('clam')
+        try:
+            s.theme_use('clam')
+        except:
+            pass
         s.configure("Treeview", background=TH["entry_bg"], foreground=TH["fg"],
                     fieldbackground=TH["entry_bg"], font=self.fn, rowheight=22)
         s.configure("Treeview.Heading", background=TH["header_bg"],
@@ -1481,7 +1496,6 @@ class App(tk.Tk):
         self.ccb.pack(side="right", padx=3)
         self.ccb.bind("<<ComboboxSelected>>", self._on_cchange)
 
-        # Update info bar text only (not score yet, sc_lbl not created)
         self._upd_info()
 
     def _build_inp(self):
@@ -1499,6 +1513,7 @@ class App(tk.Tk):
                                     font=("Consolas", self.fs + 2, "bold"),
                                     insertbackground=TH["fg"], justify="center")
         self.ent["call"].pack(ipady=3)
+        # FIX: Bind KeyRelease for Uppercase visual enforcement
         self.ent["call"].bind("<KeyRelease>", self._on_call_key)
         self.wb_lbl = tk.Label(cf, text="", bg=TH["bg"], fg=TH["err"], font=("Consolas", 9))
         self.wb_lbl.pack()
@@ -1703,7 +1718,9 @@ class App(tk.Tk):
             (L.t("backup"), self._bak, "#607D8B"),
         ]
         for txt, cmd, col in btns:
+            # FIX: Explicitly set activebackground and activeforeground to fix visibility issues
             tk.Button(bb, text=txt, command=cmd, bg=col, fg="white",
+                      activebackground=col, activeforeground="white",
                       font=("Consolas", 10), width=11, cursor="hand2").pack(side="left", padx=2)
 
     # ── Clock / Autosave / Rate ──────────────────────────────────────────────
@@ -1748,7 +1765,6 @@ class App(tk.Tk):
         if self.info_lbl:
             self.info_lbl.config(text=f"{call} | {nm} | {cat} | QSO: {len(self.log)}")
 
-        # FIX: only update score label if it exists
         if not self.sc_lbl:
             return
 
@@ -1974,13 +1990,18 @@ class App(tk.Tk):
 
     # ── Events ───────────────────────────────────────────────────────────────
 
-    def _on_enter(self, e):
-        if isinstance(self.focus_get(), tk.Entry):
-            self._add_qso()
-            return "break"
-
     def _on_call_key(self, e=None):
-        c = self.ent["call"].get().upper().strip()
+        # FIX: Uppercase visual conversion
+        c_raw = self.ent["call"].get()
+        c = c_raw.upper()
+        if c_raw != c:
+            pos = self.ent["call"].index(tk.INSERT)
+            self.ent["call"].delete(0, tk.END)
+            self.ent["call"].insert(0, c)
+            if pos <= len(c):
+                self.ent["call"].icursor(pos)
+        
+        # Check Dup
         if len(c) >= 3:
             b = self.ent["band"].get()
             m = self.ent["mode"].get()
@@ -2127,7 +2148,7 @@ class App(tk.Tk):
         for w in self.winfo_children():
             w.destroy()
 
-        # Reset all widget references
+        # Reset references
         self.ent = {}
         self.info_lbl = None
         self.sc_lbl = None
@@ -2171,11 +2192,21 @@ class App(tk.Tk):
     def _about(self):
         d = tk.Toplevel(self)
         d.title(L.t("about"))
-        d.geometry("480x340")
+        d.geometry("500x400") # FIX: Increased size for visibility
         d.resizable(False, False)
         d.configure(bg=TH["bg"])
         d.transient(self)
         d.grab_set()
+        
+        # Center Window
+        d.update_idletasks()
+        w, h = 500, 400
+        sw = d.winfo_screenwidth()
+        sh = d.winfo_screenheight()
+        x = (sw - w) // 2
+        y = (sh - h) // 2
+        d.geometry(f"{w}x{h}+{x}+{y}")
+
         tk.Label(d, text="📻 YO Log PRO v16.0 FINAL", bg=TH["bg"], fg=TH["accent"],
                  font=("Consolas", 16, "bold")).pack(pady=12)
         tk.Label(d, text="Professional Multi-Contest Logger\nFinal Edition", bg=TH["bg"],
@@ -2195,6 +2226,16 @@ class App(tk.Tk):
         d.configure(bg=TH["bg"])
         d.transient(self)
         d.grab_set()
+        
+        # Center Window
+        d.update_idletasks()
+        w, h = 410, 440
+        sw = d.winfo_screenwidth()
+        sh = d.winfo_screenheight()
+        x = (sw - w) // 2
+        y = (sh - h) // 2
+        d.geometry(f"{w}x{h}+{x}+{y}")
+
         eo = {"bg": TH["entry_bg"], "fg": TH["fg"], "font": self.fn}
         tk.Label(d, text=L.t("station_info"), bg=TH["bg"], fg=TH["accent"],
                  font=self.fb).pack(pady=6, anchor="w", padx=15)
@@ -2225,432 +2266,4 @@ class App(tk.Tk):
             self.cfg["loc"] = es["loc"].get().upper().strip()
             self.cfg["jud"] = es["jud"].get().upper().strip()
             self.cfg["addr"] = es["addr"].get().strip()
-            self.cfg["op_name"] = es["op_name"].get().strip()
-            self.cfg["power"] = es["power"].get().strip()
-            self.cfg["sounds"] = sv.get()
-            try:
-                self.cfg["fs"] = int(fs_e.get())
-            except:
-                self.cfg["fs"] = 11
-            DM.save("config.json", self.cfg)
-            self._upd_info()
-            messagebox.showinfo("OK", L.t("sett_ok"))
-            d.destroy()
-
-        tk.Button(d, text=L.t("save"), command=save, bg=TH["accent"], fg="white",
-                  width=12, font=self.fn).pack(pady=10)
-
-    def _search_dlg(self):
-        d = tk.Toplevel(self)
-        d.title(L.t("search_t"))
-        d.geometry("500x380")
-        d.configure(bg=TH["bg"])
-        d.transient(self)
-        d.grab_set()
-        tf = tk.Frame(d, bg=TH["bg"], pady=8)
-        tf.pack(fill="x", padx=8)
-        tk.Label(tf, text=L.t("search_l"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack(
-            side="left")
-        se = tk.Entry(tf, width=22, bg=TH["entry_bg"], fg=TH["fg"], font=("Consolas", 12),
-                      insertbackground=TH["fg"])
-        se.pack(side="left", padx=6)
-        se.focus()
-        rf = tk.Frame(d, bg=TH["bg"])
-        rf.pack(fill="both", expand=True, padx=8, pady=3)
-        cols = ("nr", "call", "band", "mode", "date", "time")
-        tree2 = ttk.Treeview(rf, columns=cols, show="headings", height=12)
-        for c, h, w in zip(cols,
-                           ["#", L.t("call"), L.t("band"), L.t("mode"), L.t("data"), L.t("ora")],
-                           [38, 110, 55, 55, 80, 55]):
-            tree2.heading(c, text=h)
-            tree2.column(c, width=w, anchor="center")
-        tree2.pack(fill="both", expand=True)
-        cl = tk.Label(d, text="", bg=TH["bg"], fg=TH["fg"], font=("Consolas", 10))
-        cl.pack(pady=3)
-
-        def srch(e=None):
-            q = se.get().upper().strip()
-            for i in tree2.get_children():
-                tree2.delete(i)
-            if not q:
-                cl.config(text="")
-                return
-            res = []
-            for i, qso in enumerate(self.log):
-                if q in qso.get("c", "").upper() or q in qso.get("n", "").upper():
-                    res.append((len(self.log) - i, qso))
-            for nr, qso in res:
-                tree2.insert("", "end", values=(nr, qso.get("c", ""), qso.get("b", ""),
-                                                qso.get("m", ""), qso.get("d", ""),
-                                                qso.get("t", "")))
-            cl.config(
-                text=f"{len(res)} {L.t('results').lower()}" if res else L.t("no_res"))
-
-        se.bind("<KeyRelease>", srch)
-
-    def _timer_dlg(self):
-        d = tk.Toplevel(self)
-        d.title(L.t("timer_t"))
-        d.geometry("300x200")
-        d.configure(bg=TH["bg"])
-        d.transient(self)
-        d.resizable(False, False)
-        run = [False]
-        st = [None]
-        f = tk.Frame(d, bg=TH["bg"], pady=8)
-        f.pack(fill="both", expand=True, padx=12)
-        tk.Label(f, text=L.t("dur_h"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack()
-        de = tk.Entry(f, width=8, bg=TH["entry_bg"], fg=TH["fg"], font=("Consolas", 13),
-                      justify="center", insertbackground=TH["fg"])
-        de.insert(0, "4")
-        de.pack(pady=3)
-        el = tk.Label(f, text=L.t("elapsed") + " 00:00:00", bg=TH["bg"], fg=TH["ok"],
-                      font=("Consolas", 14, "bold"))
-        el.pack(pady=2)
-        rl = tk.Label(f, text=L.t("remaining") + " --:--:--", bg=TH["bg"], fg=TH["warn"],
-                      font=("Consolas", 12))
-        rl.pack(pady=2)
-
-        def tick():
-            if run[0] and st[0]:
-                delta = (datetime.datetime.utcnow() - st[0]).total_seconds()
-                hrs = int(delta // 3600)
-                mins = int(delta % 3600 // 60)
-                secs = int(delta % 60)
-                el.config(text=f"{L.t('elapsed')} {hrs:02d}:{mins:02d}:{secs:02d}")
-                try:
-                    dh = float(de.get())
-                except:
-                    dh = 4
-                rem = max(0, dh * 3600 - delta)
-                rh = int(rem // 3600)
-                rm = int(rem % 3600 // 60)
-                rs = int(rem % 60)
-                rl.config(text=f"{L.t('remaining')} {rh:02d}:{rm:02d}:{rs:02d}",
-                          fg=TH["err"] if rem <= 1800 else TH["warn"])
-                if rem <= 0:
-                    beep("warning")
-            d.after(1000, tick)
-
-        def tog():
-            if not run[0]:
-                st[0] = datetime.datetime.utcnow()
-                run[0] = True
-                sbtn.config(text=L.t("timer_stop"), bg=TH["warn"])
-            else:
-                run[0] = False
-                sbtn.config(text=L.t("timer_start"), bg=TH["ok"])
-
-        def rst():
-            run[0] = False
-            st[0] = None
-            el.config(text=L.t("elapsed") + " 00:00:00")
-            rl.config(text=L.t("remaining") + " --:--:--")
-            sbtn.config(text=L.t("timer_start"), bg=TH["ok"])
-
-        bf = tk.Frame(f, bg=TH["bg"])
-        bf.pack(pady=6)
-        sbtn = tk.Button(bf, text=L.t("timer_start"), command=tog, bg=TH["ok"], fg="white",
-                         font=self.fn, width=9, cursor="hand2")
-        sbtn.pack(side="left", padx=4)
-        tk.Button(bf, text=L.t("timer_reset"), command=rst,
-                  bg=TH["err"], fg="white", font=self.fn, width=9, cursor="hand2").pack(
-            side="left", padx=4)
-        tick()
-
-    def _stats(self):
-        StatsWindow(self, self.log, self._cc(), self.cfg)
-
-    def _validate(self):
-        ok, msg, sc = Score.validate(self.log, self._cc(), self.cfg)
-        if ok:
-            mq = self._cc().get("min_qso", 0)
-            if mq > 0:
-                msg += f"\nDiplomă: {'DA/YES' if len(self.log) >= mq else 'NU/NO'}"
-            messagebox.showinfo(L.t("val_result"), msg)
-            beep("success")
-        else:
-            messagebox.showwarning(L.t("val_result"), msg)
-            beep("error")
-
-    # ── Import ───────────────────────────────────────────────────────────────
-
-    def _import_menu(self):
-        d = tk.Toplevel(self)
-        d.title(L.t("import_log"))
-        d.geometry("260x160")
-        d.resizable(False, False)
-        d.configure(bg=TH["bg"])
-        d.transient(self)
-        d.grab_set()
-        tk.Label(d, text=L.t("sel_fmt"), bg=TH["bg"], fg=TH["fg"], font=self.fb).pack(pady=10)
-        tk.Button(d, text=L.t("imp_adif") + " (.adi)",
-                  command=lambda: [d.destroy(), self._import_adif()],
-                  bg=TH["accent"], fg="white", width=20).pack(pady=3)
-        tk.Button(d, text=L.t("imp_csv") + " (.csv)",
-                  command=lambda: [d.destroy(), self._import_csv()],
-                  bg=TH["accent"], fg="white", width=20).pack(pady=3)
-        tk.Button(d, text=L.t("cancel"), command=d.destroy, bg=TH["btn_bg"], fg="white",
-                  width=20).pack(pady=8)
-
-    def _import_adif(self):
-        fp = filedialog.askopenfilename(filetypes=[("ADIF", "*.adi *.adif"), ("All", "*.*")])
-        if not fp:
-            return
-        try:
-            with open(fp, "r", encoding="utf-8", errors="replace") as f:
-                text = f.read()
-            qsos = Importer.parse_adif(text)
-            if qsos:
-                self.log.extend(qsos)
-                self._refresh()
-                DM.save_log(self._cid(), self.log)
-                messagebox.showinfo("OK", L.t("imp_ok").format(len(qsos)))
-            else:
-                messagebox.showwarning(L.t("error"), L.t("no_res"))
-        except Exception as e:
-            messagebox.showerror(L.t("error"), f"{L.t('imp_err')}\n{e}")
-
-    def _import_csv(self):
-        fp = filedialog.askopenfilename(filetypes=[("CSV", "*.csv"), ("All", "*.*")])
-        if not fp:
-            return
-        try:
-            with open(fp, "r", encoding="utf-8", errors="replace") as f:
-                text = f.read()
-            qsos = Importer.parse_csv(text)
-            if qsos:
-                self.log.extend(qsos)
-                self._refresh()
-                DM.save_log(self._cid(), self.log)
-                messagebox.showinfo("OK", L.t("imp_ok").format(len(qsos)))
-            else:
-                messagebox.showwarning(L.t("error"), L.t("no_res"))
-        except Exception as e:
-            messagebox.showerror(L.t("error"), f"{L.t('imp_err')}\n{e}")
-
-    # ── Export ───────────────────────────────────────────────────────────────
-
-    def _export_dlg(self):
-        d = tk.Toplevel(self)
-        d.title(L.t("export"))
-        d.geometry("280x260")
-        d.resizable(False, False)
-        d.configure(bg=TH["bg"])
-        d.transient(self)
-        d.grab_set()
-        tk.Label(d, text=L.t("sel_fmt"), bg=TH["bg"], fg=TH["fg"], font=self.fb).pack(pady=10)
-        for txt, cmd in [
-            ("Cabrillo 3.0 (.log)", lambda: self._exp_cab(d)),
-            ("ADIF 3.1 (.adi)", lambda: self._exp_adif(d)),
-            ("CSV (.csv)", lambda: self._exp_csv(d)),
-            ("EDI (.edi)", lambda: self._exp_edi(d)),
-        ]:
-            tk.Button(d, text=txt, command=cmd, bg=TH["accent"], fg="white", width=22).pack(
-                pady=2)
-        tk.Button(d, text=L.t("cancel"), command=d.destroy, bg=TH["btn_bg"], fg="white",
-                  width=22).pack(pady=8)
-
-    def _exp_cab(self, parent):
-        try:
-            cc = self._cc()
-            cid = self._cid()
-            my = self.cfg.get("call", "NOCALL")
-            nm = cc.get("name_" + L.g(), cid)
-            ci = self.cfg.get("cat", 0)
-            cats = cc.get("categories", ["ALL"])
-            cat = cats[ci] if 0 <= ci < len(cats) else "ALL"
-            lines = [
-                "START-OF-LOG: 3.0", f"CONTEST: {nm}", f"CALLSIGN: {my}",
-                f"LOCATION: {self.cfg.get('loc', '')}",
-                f"GRID-LOCATOR: {self.cfg.get('loc', '')}",
-                "CATEGORY-OPERATOR: SINGLE-OP", "CATEGORY-BAND: ALL",
-                f"CATEGORY-POWER: {self.cfg.get('power', '100')}W", "CATEGORY-MODE: MIXED",
-                f"CATEGORY: {cat}", "CLUB: ",
-                "CREATED-BY: YO Log PRO v16.0 FINAL",
-                f"NAME: {self.cfg.get('op_name', '')}",
-                f"ADDRESS: {self.cfg.get('addr', '')}",
-                "SOAPBOX: Generated by YO Log PRO v16.0 FINAL",
-            ]
-            for q in self.log:
-                freq = q.get("f", "") or str(BAND_FREQ.get(q.get("b", ""), 0))
-                l = f"QSO: {freq:>6} {q['m']:<4} {q['d']} {q['t']} {my:<13} {q.get('s', '59'):>3}"
-                if q.get('ss'):
-                    l += f" {q['ss']:>4}"
-                l += f" {q['c']:<13} {q.get('r', '59'):>3}"
-                if q.get('sr'):
-                    l += f" {q['sr']:>4}"
-                if q.get('n'):
-                    l += f" {q['n']}"
-                lines.append(l)
-            lines.append("END-OF-LOG:")
-            fn = f"cabrillo_{cid}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.log"
-            with open(os.path.join(get_data_dir(), fn), "w", encoding="utf-8") as f:
-                f.write("\n".join(lines))
-            messagebox.showinfo(L.t("exp_ok"), f"→ {fn}")
-            parent.destroy()
-        except Exception as e:
-            messagebox.showerror(L.t("error"), str(e))
-
-    def _exp_adif(self, parent):
-        try:
-            lines = ["ADIF export by YO Log PRO v16.0", "<ADIF_VER:5>3.1.0",
-                     "<PROGRAMID:14>YO_Log_PRO_v16", "<PROGRAMVERSION:4>16.0", "<EOH>", ""]
-            for q in self.log:
-                r = ""
-                for tag, k in [("CALL", "c"), ("BAND", "b"), ("MODE", "m")]:
-                    v = q.get(k, "")
-                    r += f"<{tag}:{len(v)}>{v}"
-                dc = q.get('d', '').replace("-", "")
-                r += f"<QSO_DATE:{len(dc)}>{dc}"
-                tc = q.get('t', '').replace(":", "") + "00"
-                r += f"<TIME_ON:{len(tc)}>{tc}"
-                r += f"<RST_SENT:{len(q.get('s', '59'))}>{q.get('s', '59')}"
-                r += f"<RST_RCVD:{len(q.get('r', '59'))}>{q.get('r', '59')}"
-                if q.get("f"):
-                    try:
-                        mhz = f"{float(q['f']) / 1000:.6f}"
-                        r += f"<FREQ:{len(mhz)}>{mhz}"
-                    except:
-                        pass
-                if q.get("ss"):
-                    r += f"<STX:{len(q['ss'])}>{q['ss']}"
-                if q.get("sr"):
-                    r += f"<SRX:{len(q['sr'])}>{q['sr']}"
-                n = q.get("n", "")
-                if n:
-                    if Loc.valid(n):
-                        r += f"<GRIDSQUARE:{len(n)}>{n}"
-                    else:
-                        r += f"<COMMENT:{len(n)}>{n}"
-                ml = self.cfg.get("loc", "")
-                if ml:
-                    r += f"<MY_GRIDSQUARE:{len(ml)}>{ml}"
-                r += "<EOR>"
-                lines.append(r)
-            fn = f"adif_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.adi"
-            with open(os.path.join(get_data_dir(), fn), "w", encoding="utf-8") as f:
-                f.write("\n".join(lines))
-            messagebox.showinfo(L.t("exp_ok"), f"→ {fn}")
-            parent.destroy()
-        except Exception as e:
-            messagebox.showerror(L.t("error"), str(e))
-
-    def _exp_csv(self, parent):
-        try:
-            cc = self._cc()
-            us = cc.get("use_serial", False)
-            fn = f"log_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.csv"
-            with open(os.path.join(get_data_dir(), fn), "w", encoding="utf-8", newline='') as f:
-                w = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
-                h = ["Nr", "Date", "Time", "Call", "Freq", "Band", "Mode", "RST_S", "RST_R"]
-                if us:
-                    h += ["Serial_S", "Serial_R"]
-                h += ["Note", "Country", "Score"]
-                w.writerow(h)
-                for i, q in enumerate(self.log):
-                    sc = Score.qso(q, cc, self.cfg)
-                    co, _ = DXCC.lookup(q.get("c", ""))
-                    row = [len(self.log) - i, q.get('d', ''), q.get('t', ''), q.get('c', ''),
-                           q.get('f', ''), q.get('b', ''), q.get('m', ''), q.get('s', ''),
-                           q.get('r', '')]
-                    if us:
-                        row += [q.get('ss', ''), q.get('sr', '')]
-                    row += [q.get('n', ''), co, sc]
-                    w.writerow(row)
-            messagebox.showinfo(L.t("exp_ok"), f"→ {fn}")
-            parent.destroy()
-        except Exception as e:
-            messagebox.showerror(L.t("error"), str(e))
-
-    def _exp_edi(self, parent):
-        try:
-            cc = self._cc()
-            my = self.cfg.get("call", "NOCALL")
-            ml = self.cfg.get("loc", "")
-            lines = [
-                "[REG1TEST;1]", f"TName={cc.get('name_en', 'Contest')}",
-                f"TDate={datetime.datetime.now().strftime('%Y%m%d')};{datetime.datetime.now().strftime('%Y%m%d')}",
-                f"PCall={my}", f"PWWLo={ml}", "PExch=",
-                f"PAdr1={self.cfg.get('addr', '')}", f"PSect={self.cfg.get('jud', '')}",
-                "PBand=", "PClub=", f"RName={self.cfg.get('op_name', '')}", f"RCall={my}",
-                f"RPow={self.cfg.get('power', '100')}", "RHBF=2", "MODe=", "STXFreq=",
-                "Mession=0", f"[QSORecords;{len(self.log)}]",
-            ]
-            for q in self.log:
-                dt = q.get("d", "").replace("-", "")[2:]
-                tm = q.get("t", "").replace(":", "")
-                n = q.get("n", "")
-                loc = n if Loc.valid(n) else ""
-                dist = int(Loc.dist(ml, loc)) if loc and ml else 0
-                lines.append(
-                    f"{dt};{tm};{q.get('c', '')};{q.get('s', '59')};{q.get('ss', '001')};"
-                    f"{q.get('r', '59')};{q.get('sr', '001')};{loc};{dist};;")
-            fn = f"edi_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.edi"
-            with open(os.path.join(get_data_dir(), fn), "w", encoding="utf-8") as f:
-                f.write("\n".join(lines))
-            messagebox.showinfo(L.t("exp_ok"), f"→ {fn}")
-            parent.destroy()
-        except Exception as e:
-            messagebox.showerror(L.t("error"), str(e))
-
-    # ── Print / Verify / Backup ──────────────────────────────────────────────
-
-    def _print_log(self):
-        try:
-            cc = self._cc()
-            fn = f"print_{self._cid()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.txt"
-            fp = os.path.join(get_data_dir(), fn)
-            with open(fp, "w", encoding="utf-8") as f:
-                f.write(f"{'=' * 70}\n")
-                f.write(
-                    f"  YO Log PRO v16.0 — {self.cfg.get('call', '')} — "
-                    f"{cc.get('name_' + L.g(), self._cid())}\n")
-                f.write(f"  Printed: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
-                f.write(f"{'=' * 70}\n\n")
-                f.write(
-                    f"{'Nr':>4} {'Call':<14} {'Band':<6} {'Mode':<5} {'RST S':<6} {'RST R':<6} "
-                    f"{'Note':<12} {'Date':<11} {'Time':<6}\n")
-                f.write(f"{'-' * 70}\n")
-                for i, q in enumerate(self.log):
-                    nr = len(self.log) - i
-                    f.write(
-                        f"{nr:>4} {q.get('c', ''):<14} {q.get('b', ''):<6} {q.get('m', ''):<5} "
-                        f"{q.get('s', ''):<6} {q.get('r', ''):<6} {q.get('n', ''):<12} "
-                        f"{q.get('d', ''):<11} {q.get('t', ''):<6}\n")
-                f.write(f"\n{'=' * 70}\n")
-                qp, mc, tot = Score.total(self.log, cc, self.cfg)
-                f.write(f"  Total: {len(self.log)} QSO | Score: {tot}\n")
-                f.write(f"{'=' * 70}\n")
-            messagebox.showinfo(L.t("print_log"), f"→ {fn}")
-        except Exception as e:
-            messagebox.showerror(L.t("error"), str(e))
-
-    def _verify(self):
-        raw = json.dumps(self.log, sort_keys=True, ensure_ascii=False)
-        h = hashlib.md5(raw.encode()).hexdigest()[:12]
-        messagebox.showinfo(L.t("verify"), L.t("verify_ok").format(len(self.log), h))
-
-    def _bak(self):
-        if DM.backup(self._cid(), self.log):
-            messagebox.showinfo("OK", L.t("bak_ok"))
-        else:
-            messagebox.showerror(L.t("error"), L.t("bak_err"))
-
-    def _exit(self):
-        if messagebox.askyesno(L.t("exit_t"), L.t("exit_m")):
-            self.cfg["win_geo"] = self.geometry()
-            DM.save_log(self._cid(), self.log)
-            DM.save("config.json", self.cfg)
-            DM.save("contests.json", self.contests)
-            DM.backup(self._cid(), self.log)
-            self.destroy()
-
-
-# =============================================================================
-# ENTRY POINT
-# =============================================================================
-
-if __name__ == "__main__":
-    app = App()
-    app.mainloop()
+            self.cfg["
