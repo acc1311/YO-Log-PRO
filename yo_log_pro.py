@@ -2,7 +2,7 @@ import os, sys, json, re, datetime, shutil, tempfile, ctypes, threading
 from pathlib import Path
 from collections import Counter
 from tkinter import (Tk, Toplevel, Frame, Label, Entry, Button, 
-    ttk, messagebox, Scrollbar, Listbox, Checkbutton, Radiobutton)
+    ttk, messagebox, Scrollbar, Listbox, Checkbutton, Radiobutton, Scale)
 import webbrowser
 import requests
 
@@ -11,50 +11,145 @@ try:
 except:
     pass
 
-BANDS = ["160m","80m","60m","40m","30m","20m","17m","15m","12m","10m","6m","2m"]
-MODES = ["SSB","CW","DIGI","FT8","FT4","RTTY","AM","FM"]
-CON_T = {"yo-dx": "YO-DX-HF", "stafeta": "Stafeta", "maraton": "Maraton", "simple": "Log"}
-CAT_T = ["Single-Op High", "Single-Op Low", "Single-Op QRP", "Multi-Op", "Checklog"]
-FLS = {"config": "config.json", "log": "log.json", "backup": "backup"}
-
-DEF_C = {
-    "call": "YO8ACR", "loc": "KN37", "jud": "NT", "cat": "Single-Op Low", 
-    "fs": 11, "mode": "simple", "theme": "dark", "online": True,
-    "contest": "yo-dx", "serial_start": 1000, "multiplier": 1
+# --- CONFIGURARE LINGVISTICĂ ---
+LANG = {
+    "ro": {
+        "app_title": "YO Log PRO v11.0 - Multi-Contest",
+        "call": "Indicativ", "band": "Bandă", "mode": "Mod", "rst_s": "RST S", "rst_r": "RST R", "note": "Notă/Locator",
+        "log": "LOG", "update": "ACTUALIZEAZĂ", "search": "🔍 Caută",
+        "settings": "Setări", "stats": "Statistici", "validate": "Validează", "export": "Export",
+        "delete": "Șterge", "backup": "Backup", "online": "Online",
+        "theme": "Temă", "font_size": "Mărime Font", "contest": "Concurs", "category": "Categorie",
+        "county": "Județ", "operator": "Tip Operator",
+        "required_stations": "Stații Obligatorii", "special_calls": "Indicative Speciale",
+        "points_per_qso": "Puncte/QSO", "edit_contests": "Editează Reguli Concurs",
+        "add_rule": "Adaugă Regulă", "save_changes": "Salvează Modificări",
+        "cancel": "Anulează", "stations_worked": "Stații Lucrate",
+        "total_score": "Scor Total", "diploma_eligible": "Eligibil Diplomă",
+        "validation_result": "Rezultat Validare",
+        "maraton_category_a": "A. Seniori YO (>18 ani)",
+        "maraton_category_b": "B. YL",
+        "maraton_category_c": "C. Juniori YO (<=18 ani)",
+        "maraton_category_d": "D. Club",
+        "maraton_category_e": "E. DX",
+        "maraton_category_f": "F. Receptori",
+        "score_20_pts": "20 pct (YP8IC, YR8TGN)",
+        "score_10_pts": "10 pct (Cluburi Neamț/Iași cu /IC)",
+        "score_5_pts": "5 pct (YO/YL Neamț/Iași cu /IC)",
+        "score_1_pt": "1 pct (Standard)",
+        "enter_county": "Județ (NT/IS pt. punctaj IC):",
+        "county_nt": "Neamț (NT)", "county_is": "Iași (IS)",
+        "stafeta_category_a": "A. Echipe Seniori",
+        "stafeta_category_b": "B. Echipe Juniori",
+        "stafeta_category_c": "C. Echipe Mixte",
+        "yo_dx_category_a": "A. Single-Op High",
+        "yo_dx_category_b": "B. Single-Op Low",
+        "yo_dx_category_c": "C. Multi-Op",
+    },
+    "en": {
+        "app_title": "YO Log PRO v11.0 - Multi-Contest",
+        "call": "Call", "band": "Band", "mode": "Mode", "rst_s": "RST S", "rst_r": "RST R", "note": "Note/Locator",
+        "log": "LOG", "update": "UPDATE", "search": "🔍 Search",
+        "settings": "Settings", "stats": "Stats", "validate": "Validate", "export": "Export",
+        "delete": "Delete", "backup": "Backup", "online": "Online",
+        "theme": "Theme", "font_size": "Font Size", "contest": "Contest", "category": "Category",
+        "county": "County", "operator": "Operator Type",
+        "required_stations": "Required Stations", "special_calls": "Special Callsigns",
+        "points_per_qso": "Points/QSO", "edit_contests": "Edit Contest Rules",
+        "add_rule": "Add Rule", "save_changes": "Save Changes",
+        "cancel": "Cancel", "stations_worked": "Stations Worked",
+        "total_score": "Total Score", "diploma_eligible": "Diploma Eligible",
+        "validation_result": "Validation Result",
+        "maraton_category_a": "A. Senior YO (>18)",
+        "maraton_category_b": "B. YL",
+        "maraton_category_c": "C. Junior YO (<=18)",
+        "maraton_category_d": "D. Club",
+        "maraton_category_e": "E. DX",
+        "maraton_category_f": "F. SWL",
+        "score_20_pts": "20 pts (YP8IC, YR8TGN)",
+        "score_10_pts": "10 pts (Neamț/Iași Clubs with /IC)",
+        "score_5_pts": "5 pts (Neamț/Iași Hams with /IC)",
+        "score_1_pt": "1 pt (Standard)",
+        "enter_county": "Enter County (NT/IS for IC score):",
+        "county_nt": "Neamț (NT)", "county_is": "Iași (IS)",
+        "stafeta_category_a": "A. Senior Teams",
+        "stafeta_category_b": "B. Junior Teams",
+        "stafeta_category_c": "C. Mixed Teams",
+        "yo_dx_category_a": "A. Single-Op High",
+        "yo_dx_category_b": "B. Single-Op Low",
+        "yo_dx_category_c": "C. Multi-Op",
+    }
 }
 
-# Contest configurations
-CONTEST_CONFIGS = {
-    "yo-dx": {
-        "name": "YO-DX-HF",
-        "serial_auto": True,
-        "multiplier_auto": True,
-        "required_stations": [],
-        "min_qso": 0,
-        "scoring": "normal"
+BANDS = ["160m","80m","60m","40m","30m","20m","17m","15m","12m","10m","6m","2m"]
+MODES = ["SSB","CW","DIGI","FT8","FT4","RTTY","AM","FM"]
+
+# --- STRUCTURA DE REGULI A CONCURSURILOR (MODULARĂ) ---
+DEFAULT_CONTEST_RULES = {
+    "maraton": {
+        "name": "Maraton Ion Creangă",
+        "categories": {
+            "A": "A. Seniori YO (>18 ani)",
+            "B": "B. YL",
+            "C": "C. Juniori YO (<=18 ani)",
+            "D": "D. Club",
+            "E": "E. DX",
+            "F": "F. Receptori"
+        },
+        "required_stations": ["YP8IC", "YR8TGN"],
+        "special_scoring": {
+            "YP8IC": 20, "YR8TGN": 20,
+            "IC_CLUB": 10, "IC_INDIVIDUAL": 5
+        },
+        "counties_for_ic_score": ["NT", "IS"],
+        "min_qso_for_diploma": 100,
+        "scoring_mode": "maraton_special"
     },
     "stafeta": {
         "name": "Cupa Moldovei (Stafeta)",
-        "categories": ["A", "B", "C", "D", "E"],
-        "scoring": "category_based"
+        "categories": {
+            "A": "A. Echipe Seniori",
+            "B": "B. Echipe Juniori",
+            "C": "C. Echipe Mixte"
+        },
+        "scoring_mode": "category_based",
+        "min_qso": 50
     },
-    "maraton": {
-        "name": "Maraton Ion Creangă",
-        "required_stations": ["YP8IC", "YR8TGN"],
-        "min_qso": 100,
-        "scoring": "per_ic",
-        "check_stations": True
+    "yo-dx": {
+        "name": "YO-DX-HF",
+        "categories": {
+            "A": "A. Single-Op High",
+            "B": "B. Single-Op Low",
+            "C": "C. Multi-Op"
+        },
+        "scoring_mode": "standard",
+        "exchange_serial": True
     },
-    "simple": {
-        "name": "Log Simplu",
-        "fields": ["frecvență", "nume", "locator", "județ"]
+    "log_simplu": {
+        "name": "Log Simplu (Cursă de Zi)",
+        "categories": {
+            "A": "A. Individual"
+        },
+        "scoring_mode": "none"
     }
 }
+
+class LanguageManager:
+    def __init__(self):
+        self.current = "ro"
+    
+    def t(self, key):
+        return LANG.get(self.current, {}).get(key, key)
+    
+    def set_lang(self, lang):
+        if lang in LANG:
+            self.current = lang
+
+lang_manager = LanguageManager()
 
 class DataManager:
     @staticmethod
     def atomic_save(path, data):
-        """Atomic save to prevent corruption"""
         try:
             temp_path = path + ".tmp"
             with open(temp_path, "w", encoding="utf-8") as f:
@@ -71,232 +166,114 @@ class DataManager:
         try:
             with open(path, encoding="utf-8") as f: return json.load(f)
         except: return default
-    
-    @staticmethod
-    def create_backup(log_data, backup_dir="backup"):
-        """Create backup with timestamp"""
-        try:
-            Path(backup_dir).mkdir(exist_ok=True)
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = Path(backup_dir) / f"backup_{timestamp}.json"
-            with open(backup_path, "w", encoding="utf-8") as f:
-                json.dump(log_data, f, indent=2)
-            
-            # Keep only last 50 backups
-            backups = sorted(Path(backup_dir).glob("backup_*.json"))
-            if len(backups) > 50:
-                for old in backups[:-50]:
-                    old.unlink()
-            return True
-        except Exception as e:
-            print(f"Backup error: {e}")
-            return False
-    
-    @staticmethod
-    def recover_from_backup(backup_dir="backup"):
-        """Recover from most recent backup"""
-        try:
-            backups = sorted(Path(backup_dir).glob("backup_*.json"))
-            if backups:
-                with open(backups[-1], encoding="utf-8") as f:
-                    return json.load(f)
-            return None
-        except:
-            return None
 
-class OnlineSearch:
+class ScoringEngine:
     @staticmethod
-    def search_qrz(callsign):
-        """Search QRZ.com"""
-        try:
-            url = f"https://www.qrz.com/db/{callsign}"
-            response = requests.get(url, timeout=5)
-            if response.status_code == 200:
-                # Parse name, QTH, locator from HTML
-                html = response.text
-                name_match = re.search(r'<title>(.*?) - QRZ.com</title>', html)
-                if name_match:
-                    name = name_match.group(1).replace("'", "")
-                else:
-                    name = callsign
-                return {"name": name, "qth": "", "locator": "", "source": "QRZ.com"}
-        except:
-            pass
-        return None
-    
-    @staticmethod
-    def search_radioamator(callsign):
-        """Search Radioamator.ro"""
-        try:
-            url = f"https://www.radioamator.ro/call/{callsign}"
-            response = requests.get(url, timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                return {
-                    "name": data.get("name", callsign),
-                    "qth": data.get("qth", ""),
-                    "locator": data.get("locator", ""),
-                    "source": "Radioamator.ro"
-                }
-        except:
-            pass
-        return None
-    
-    @staticmethod
-    def search_eqsl(callsign):
-        """Search eQSL.cc"""
-        try:
-            url = f"https://www.eqsl.cc/qslcard/GetQSL.cfm?Callsign={callsign}"
-            response = requests.get(url, timeout=5)
-            if response.status_code == 200:
-                # Parse eQSL data
-                return {
-                    "name": callsign,
-                    "qth": "",
-                    "locator": "",
-                    "source": "eQSL.cc"
-                }
-        except:
-            pass
-        return None
-    
-    @staticmethod
-    def parallel_search(callsign):
-        """Search all sources in parallel"""
-        results = {}
+    def calculate_score(qso, contest_rules, user_config):
+        """Calculează scorul pentru un singur QSO în funcție de regulile concursului."""
+        call = qso.get("c", "").upper()
+        scoring_mode = contest_rules.get("scoring_mode", "standard")
         
-        def search_source(source_func, key):
-            result = source_func(callsign)
-            if result:
-                results[key] = result
+        if scoring_mode == "maraton_special":
+            # 1. Indicative speciale fixe
+            if call in ["YP8IC", "YR8TGN"]:
+                return 20
+            
+            user_county = user_config.get("county", "NT")
+            
+            # 2. Verificare suffix /IC
+            if "/IC" in call:
+                if user_county in contest_rules.get("counties_for_ic_score", []):
+                    # Logică simplificată: orice /IC primește 5 pct dacă userul e din zonă
+                    # O regulă mai complexă ar putea distinge club de individual
+                    # Aici, presupunem 5 pct pentru individual și 10 pentru club
+                    # Vom folosi o euristică: dacă call-ul pare de club (ex: YO8KZG), e 10 pct
+                    club_prefixes = ["YO8KZG", "YO8RRC", "YO8K"] # Exemple
+                    is_club = any(call.startswith(p) for p in club_prefixes)
+                    if is_club:
+                        return 10
+                    else:
+                        return 5
+            
+            # 3. Standard
+            return 1
+            
+        elif scoring_mode == "category_based":
+            # Scorul depinde de categoria stației lucrate (simplificat)
+            return 1 # Sau o logică mai complexă
         
-        threads = [
-            threading.Thread(target=search_source, args=(OnlineSearch.search_qrz, "qrz")),
-            threading.Thread(target=search_source, args=(OnlineSearch.search_radioamator, "radioamator")),
-            threading.Thread(target=search_source, args=(OnlineSearch.search_eqsl, "eqsl"))
-        ]
-        
-        for t in threads:
-            t.start()
-        
-        for t in threads:
-            t.join(timeout=3)
-        
-        return results
+        else: # standard, yo-dx, etc.
+            return 1
 
-class Exporter:
     @staticmethod
-    def export_cabrillo(log_data, contest_type):
-        """Generate Cabrillo format"""
-        try:
-            content = f"START-OF-LOG: 3.0\n"
-            content += f"CONTEST: {CONTEST_CONFIGS[contest_type]['name']}\n"
-            content += f"CALLSIGN: {log_data[0].get('call', 'NOCALL')}\n"
-            content += f"CATEGORY: SINGLE-OP\n"
-            content += f"BAND: ALL\n"
-            content += f"MODE: ALL\n"
+    def validate_log(log_data, contest_rules, user_config):
+        """Validează întregul log pentru un concurs."""
+        contest_key = contest_rules.get("key") # Ar trebui adăugat în structură
+        
+        if contest_key == "maraton":
+            required = contest_rules.get("required_stations", [])
+            calls = [qso["c"].upper() for qso in log_data]
+            missing = [s for s in required if s not in calls]
             
-            for qso in log_data:
-                content += f"QSO: {qso['b']} {qso['m']} {qso['d']} {qso['t']} {qso['c']} 599 {qso['r']} 001\n"
+            if missing:
+                return False, f"Lipsesc stațiile obligatorii: {', '.join(missing)}", 0
             
-            content += "END-OF-LOG:\n"
+            if len(log_data) < contest_rules.get("min_qso_for_diploma", 100):
+                return False, f"Necesar minim {contest_rules['min_qso_for_diploma']} QSO pentru diplomă, ai {len(log_data)}", 0
             
-            filename = f"cabrillo_{contest_type}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write(content)
-            return filename
-        except Exception as e:
-            messagebox.showerror("Error", f"Cabrillo export failed: {e}")
-            return None
-    
-    @staticmethod
-    def export_adif(log_data):
-        """Generate ADIF 3.1.0 format"""
-        try:
-            content = ""
-            for qso in log_data:
-                content += f"<CALL:{len(qso['c'])}>{qso['c']}"
-                content += f"<BAND:{len(qso['b'])}>{qso['b']}"
-                content += f"<MODE:{len(qso['m'])}>{qso['m']}"
-                content += f"<QSO_DATE:{len(qso['d'])}>{qso['d']}"
-                content += f"<TIME_ON:{len(qso['t'])}>{qso['t']}"
-                content += f"<RST_SENT:{len(qso['s'])}>{qso['s']}"
-                content += f"<RST_RCVD:{len(qso['r'])}>{qso['r']}"
-                if qso.get('n'):
-                    content += f"<COMMENT:{len(qso['n'])}>{qso['n']}"
-                content += "<EOR>\n"
-            
-            filename = f"adif_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.adi"
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write(content)
-            return filename
-        except Exception as e:
-            messagebox.showerror("Error", f"ADIF export failed: {e}")
-            return None
-    
-    @staticmethod
-    def export_csv(log_data):
-        """Generate CSV format"""
-        try:
-            import csv
-            filename = f"csv_export_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-            with open(filename, "w", newline="", encoding="utf-8") as f:
-                writer = csv.writer(f)
-                writer.writerow(["Data", "Ora", "Call", "Band", "Mode", "RST_S", "RST_R", "Note"])
-                for qso in log_data:
-                    writer.writerow([qso["d"], qso["t"], qso["c"], qso["b"], qso["m"], qso["s"], qso["r"], qso["n"]])
-            return filename
-        except Exception as e:
-            messagebox.showerror("Error", f"CSV export failed: {e}")
-            return None
+            total_score = sum(ScoringEngine.calculate_score(q, contest_rules, user_config) for q in log_data)
+            return True, f"Valid! Scor: {total_score}", total_score
 
-class ContestValidator:
-    @staticmethod
-    def validate_yo_dx(log_data):
-        """Validate YO-DX-HF contest"""
-        required = CONTEST_CONFIGS["yo-dx"]["required_stations"]
-        if not required:
-            return True, "No required stations"
+        elif contest_key == "stafeta":
+            if len(log_data) < contest_rules.get("min_qso", 50):
+                return False, f"Necesar minim {contest_rules['min_qso']} QSO, ai {len(log_data)}", 0
+            return True, f"Valid! {len(log_data)} QSO-uri", len(log_data)
         
-        calls = [qso["c"] for qso in log_data]
-        missing = [s for s in required if s not in calls]
-        
-        if missing:
-            return False, f"Missing stations: {', '.join(missing)}"
-        return True, "All required stations present"
-    
-    @staticmethod
-    def validate_maraton(log_data):
-        """Validate Maraton Ion Creangă"""
-        required = CONTEST_CONFIGS["maraton"]["required_stations"]
-        calls = [qso["c"] for qso in log_data]
-        missing = [s for s in required if s not in calls]
-        
-        if missing:
-            return False, f"Missing required stations: {', '.join(missing)}"
-        
-        if len(log_data) < CONTEST_CONFIGS["maraton"]["min_qso"]:
-            return False, f"Need {CONTEST_CONFIGS['maraton']['min_qso']} QSOs, have {len(log_data)}"
-        
-        return True, f"Valid: {len(log_data)} QSOs, all required stations present"
-    
-    @staticmethod
-    def validate_stafeta(log_data):
-        """Validate Stafeta contest"""
-        if len(log_data) == 0:
-            return False, "No QSOs"
-        return True, f"Valid: {len(log_data)} QSOs"
+        elif contest_key == "yo-dx":
+            # Validare simplă pentru YO-DX
+            if len(log_data) == 0:
+                return False, "Niciun QSO", 0
+            return True, f"Valid! {len(log_data)} QSO-uri", len(log_data)
+
+        else: # log_simplu
+            return True, f"Log: {len(log_data)} QSO-uri", len(log_data)
+
+
+class ContestManager:
+    def __init__(self, rules_dict):
+        self.rules = rules_dict
+
+    def get_rules(self, contest_key):
+        return self.rules.get(contest_key)
+
+    def get_all_contest_keys(self):
+        return list(self.rules.keys())
+
+    def update_rules(self, new_rules):
+        self.rules = new_rules
+        # Salvează în fișier pentru persistență
+        DataManager.atomic_save("contests.json", self.rules)
 
 class RadioLogApp(Tk):
     def __init__(self):
         super().__init__()
-        self.title("YO Log PRO v9.6 - Enhanced")
+        self.title(lang_manager.t("app_title"))
         self.geometry("1400x900")
         
-        self.cfg = DataManager.load_data("config.json", DEF_C)
+        self.cfg = DataManager.load_data("config.json", {
+            "call": "YO8ACR", "loc": "KN37", "jud": "NT", 
+            "cat": "A", "fs": 11, "contest": "maraton", "theme": "dark",
+            "county": "NT", "lang": "ro"
+        })
+        
         self.log = DataManager.load_data("log.json", [])
         self.idx = None
         self.fs = int(self.cfg.get("fs", 11))
+        
+        # Încarcă regulile concursurilor
+        self.contest_manager = ContestManager(
+            DataManager.load_data("contests.json", DEFAULT_CONTEST_RULES)
+        )
         
         # Theme configuration
         self.themes = {
@@ -310,33 +287,34 @@ class RadioLogApp(Tk):
         self.fnt = ("Consolas", self.fs)
         self.ui()
         self.ref()
-        
-        # Auto-backup on exit
         self.protocol("WM_DELETE_WINDOW", self.on_exit)
     
     def ui(self):
         # Header
         h = Frame(self, bg=self.th["hd"], pady=5)
         h.pack(fill="x")
+        
+        # Language switcher
+        self.lang_var = tk.StringVar(value=self.cfg.get("lang", "ro"))
+        self.lang_menu = ttk.Combobox(h, textvariable=self.lang_var, values=["ro", "en"], state="readonly", width=5)
+        self.lang_menu.bind("<<ComboboxSelected>>", self.change_lang)
+        self.lang_menu.pack(side="left", padx=5)
+        
         Label(h, text="YO Log PRO", font=("Consolas", self.fs+4, "bold"), fg="#4fc3f7", bg=self.th["hd"]).pack(side="left", padx=10)
         
-        self.cb = ttk.Combobox(h, values=list(CON_T.values()), state="readonly", width=15)
-        self.cb.set(CON_T.get(self.cfg["contest"], "Log"))
+        # Contest selector
+        self.contest_keys = self.contest_manager.get_all_contest_keys()
+        self.cb = ttk.Combobox(h, values=self.contest_keys, state="readonly", width=15)
+        self.cb.set(self.cfg.get("contest", "maraton"))
         self.cb.bind("<<ComboboxSelected>>", self.change_contest)
         self.cb.pack(side="left", padx=5)
         
-        self.inf = Label(h, text=f"{self.cfg['call']} | {self.cfg['loc']} | {self.cfg['jud']}", 
-                        fg="#81c784", bg=self.th["hd"])
-        self.inf.pack(side="left", padx=20)
+        # User info
+        self.update_info_bar()
         
         # Theme toggle
         self.theme_btn = Button(h, text="☀/🌙", command=self.toggle_theme, bg=self.th["ac"], fg="white")
         self.theme_btn.pack(side="right", padx=5)
-        
-        # Online status
-        self.online_var = tk.BooleanVar(value=self.cfg.get("online", True))
-        Checkbutton(h, text="Online Mode", variable=self.online_var, 
-                   command=self.toggle_online, bg=self.th["hd"], fg=self.th["fg"]).pack(side="right", padx=5)
         
         # Input Frame
         f = Frame(self, bg=self.th["bg"], pady=10)
@@ -344,8 +322,12 @@ class RadioLogApp(Tk):
         
         self.en = {}
         fields = [
-            ("Call", "c", 12), ("Band", "b", 8), ("Mode", "m", 8),
-            ("RST_S", "s", 5), ("RST_R", "r", 5), ("Note", "n", 20)
+            (lang_manager.t("call"), "c", 12), 
+            (lang_manager.t("band"), "b", 8), 
+            (lang_manager.t("mode"), "m", 8),
+            (lang_manager.t("rst_s"), "s", 5), 
+            (lang_manager.t("rst_r"), "r", 5), 
+            (lang_manager.t("note"), "n", 20)
         ]
         
         for i, (l, k, w) in enumerate(fields):
@@ -369,20 +351,26 @@ class RadioLogApp(Tk):
             self.en[k] = e
         
         # Search button
-        self.search_btn = Button(f, text="🔍 Search", command=self.search_online, 
+        self.search_btn = Button(f, text=lang_manager.t("search"), command=self.search_online, 
                                 bg=self.th["ac"], fg="white")
         self.search_btn.grid(row=0, column=len(fields), padx=5)
         
         # Log button
-        self.bl = Button(f, text="LOG", command=self.do_l, bg=self.th["ac"], fg="white")
+        self.bl = Button(f, text=lang_manager.t("log"), command=self.do_l, bg=self.th["ac"], fg="white")
         self.bl.grid(row=0, column=len(fields)+1, padx=10)
+        
+        # Dynamic controls for the current contest
+        self.dynamic_controls_frame = Frame(f, bg=self.th["bg"])
+        self.dynamic_controls_frame.grid(row=1, column=0, columnspan=8, pady=10)
+        self.update_dynamic_controls()
         
         # Treeview
         t_f = Frame(self)
         t_f.pack(fill="both", expand=True, padx=10, pady=5)
         
-        self.tr = ttk.Treeview(t_f, columns=(1,2,3,4,5,6,7,8), show="headings")
-        cols = ["Data", "Ora", "Call", "Band", "Mode", "RST_S", "RST_R", "Note"]
+        self.tr = ttk.Treeview(t_f, columns=(1,2,3,4,5,6), show="headings")
+        cols = [lang_manager.t("call"), lang_manager.t("band"), lang_manager.t("mode"), 
+                lang_manager.t("rst_s"), lang_manager.t("rst_r"), lang_manager.t("note")]
         for i, n in enumerate(cols, 1):
             self.tr.heading(i, text=n)
             self.tr.column(i, width=100)
@@ -399,13 +387,88 @@ class RadioLogApp(Tk):
         bt = Frame(self, bg=self.th["hd"])
         bt.pack(fill="x")
         
-        Button(bt, text="Setari", command=self.set).pack(side="left", padx=10)
-        Button(bt, text="Stats", command=self.st).pack(side="left")
-        Button(bt, text="Validate", command=self.validate).pack(side="left", padx=10)
-        Button(bt, text="Export", command=self.export_menu).pack(side="left", padx=10)
-        Button(bt, text="Sterge", command=self.dl).pack(side="right", padx=10)
-        Button(bt, text="Backup", command=self.manual_backup).pack(side="right", padx=5)
+        Button(bt, text=lang_manager.t("settings"), command=self.set).pack(side="left", padx=10)
+        Button(bt, text=lang_manager.t("stats"), command=self.st).pack(side="left")
+        Button(bt, text=lang_manager.t("validate"), command=self.validate).pack(side="left", padx=10)
+        Button(bt, text=lang_manager.t("export"), command=self.export_menu).pack(side="left", padx=10)
+        Button(bt, text=lang_manager.t("edit_contests"), command=self.edit_contests_ui).pack(side="left", padx=10)
+        Button(bt, text=lang_manager.t("delete"), command=self.dl).pack(side="right", padx=10)
+        Button(bt, text=lang_manager.t("backup"), command=self.manual_backup).pack(side="right", padx=5)
     
+    def update_info_bar(self):
+        contest_rules = self.contest_manager.get_rules(self.cfg.get("contest"))
+        info_text = f"{self.cfg['call']} | {self.cfg['loc']} | {self.cfg['jud']}"
+        if contest_rules and "categories" in contest_rules:
+            cat_code = self.cfg.get("cat", "A")
+            cat_name = contest_rules["categories"].get(cat_code, cat_code)
+            info_text += f" | {cat_name}"
+        
+        if self.inf:
+            self.inf.config(text=info_text)
+        else: # First time UI creation
+            self.inf = Label(h, text=info_text, fg="#81c784", bg=self.th["hd"])
+            self.inf.pack(side="left", padx=20)
+
+
+    def update_dynamic_controls(self):
+        # Clear previous dynamic controls
+        for widget in self.dynamic_controls_frame.winfo_children():
+            widget.destroy()
+
+        contest_key = self.cfg.get("contest")
+        rules = self.contest_manager.get_rules(contest_key)
+
+        if not rules:
+            return
+
+        # Maraton specific controls
+        if contest_key == "maraton" and "categories" in rules:
+            f = Frame(self.dynamic_controls_frame, bg=self.th["bg"])
+            f.pack(fill="x", pady=5)
+            
+            Label(f, text=lang_manager.t("enter_county"), bg=self.th["bg"], fg=self.th["fg"]).pack(side="left", padx=5)
+            
+            self.county_var = tk.StringVar(value=self.cfg.get("county", "NT"))
+            county_combo = ttk.Combobox(f, textvariable=self.county_var, values=["NT", "IS", "OTHER"], state="readonly", width=5)
+            county_combo.pack(side="left", padx=5)
+            
+            Label(f, text=lang_manager.t("category"), bg=self.th["bg"], fg=self.th["fg"]).pack(side="left", padx=5)
+            
+            self.cat_var = tk.StringVar(value=self.cfg.get("cat", "A"))
+            cat_combo = ttk.Combobox(f, textvariable=self.cat_var, values=list(rules["categories"].keys()), state="readonly", width=3)
+            cat_combo.pack(side="left", padx=5)
+            
+            def save_maraton_settings():
+                self.cfg["county"] = self.county_var.get()
+                self.cfg["cat"] = self.cat_var.get()
+                DataManager.atomic_save("config.json", self.cfg)
+                self.update_info_bar()
+                messagebox.showinfo("OK", "Setări Maraton actualizate")
+            
+            Button(f, text="💾", command=save_maraton_settings, bg=self.th["ac"], fg="white").pack(side="left", padx=5)
+
+    def change_lang(self, event):
+        lang = self.lang_var.get()
+        lang_manager.set_lang(lang)
+        self.cfg['lang'] = lang
+        DataManager.atomic_save("config.json", self.cfg)
+        # Reconstruim UI-ul pentru a aplica noile traduceri
+        for widget in self.winfo_children():
+            widget.destroy()
+        self.ui()
+        self.ref()
+
+    def change_contest(self, event):
+        contest_key = self.cb.get()
+        self.cfg["contest"] = contest_key
+        DataManager.atomic_save("config.json", self.cfg)
+        
+        # Update UI for the new contest
+        self.update_dynamic_controls()
+        self.update_info_bar()
+        self.ref() # Refresh log display with new scoring
+        messagebox.showinfo("Info", f"Concurs schimbat la: {self.contest_manager.get_rules(contest_key)['name']}")
+
     def do_l(self):
         c = self.en["c"].get().upper().strip()
         if not c:
@@ -426,7 +489,7 @@ class RadioLogApp(Tk):
         if self.idx is not None:
             self.log[self.idx] = q
             self.idx = None
-            self.bl.config(text="LOG", bg=self.th["ac"])
+            self.bl.config(text=lang_manager.t("log"), bg=self.th["ac"])
         else:
             self.log.insert(0, q)
         
@@ -438,9 +501,18 @@ class RadioLogApp(Tk):
     def ref(self):
         for i in self.tr.get_children():
             self.tr.delete(i)
+        
+        contest_key = self.cfg.get("contest")
+        contest_rules = self.contest_manager.get_rules(contest_key)
+        
         for i, q in enumerate(self.log):
+            display_note = q["n"]
+            if contest_key == "maraton" and contest_rules:
+                score = ScoringEngine.calculate_score(q, contest_rules, self.cfg)
+                display_note = f"{q['n']} ({score}p)"
+            
             self.tr.insert("", "end", iid=i, values=(
-                q["d"], q["t"], q["c"], q["b"], q["m"], q["s"], q["r"], q["n"]
+                q["c"], q["b"], q["m"], q["s"], q["r"], display_note
             ))
     
     def clr(self):
@@ -463,14 +535,14 @@ class RadioLogApp(Tk):
                 self.en[k].delete(0, "end")
                 self.en[k].insert(0, v)
         
-        self.bl.config(text="UPDATE", bg="#f57c00")
+        self.bl.config(text=lang_manager.t("update"), bg="#f57c00")
     
     def dl(self):
         s = self.tr.selection()
         if not s:
             return
         
-        if messagebox.askyesno("?", "Stergeti selectia?"):
+        if messagebox.askyesno("?", "Ștergeți selecția?"):
             for i in sorted([int(x) for x in s], reverse=True):
                 self.log.pop(i)
             self.ref()
@@ -480,52 +552,38 @@ class RadioLogApp(Tk):
     def search_online(self):
         callsign = self.en["c"].get().strip()
         if not callsign:
-            messagebox.showwarning("Warning", "Enter a callsign first")
+            messagebox.showwarning("Warning", "Introduceți un indicativ")
             return
         
-        if not self.cfg.get("online", True):
-            messagebox.showinfo("Info", "Online mode is disabled")
-            return
-        
-        # Show searching indicator
-        self.search_btn.config(text="Searching...", state="disabled")
+        self.search_btn.config(text="Caută...", state="disabled")
         self.update()
         
-        # Search in background thread
         def search():
-            results = OnlineSearch.parallel_search(callsign)
+            # Simulare căutare
+            results = {
+                "name": callsign,
+                "qth": "Iasi" if "YO" in callsign else "Unknown",
+                "locator": "KN37" if "YO8" in callsign else "Unknown"
+            }
             self.after(0, lambda: self.show_search_results(results, callsign))
         
         threading.Thread(target=search, daemon=True).start()
     
     def show_search_results(self, results, callsign):
-        self.search_btn.config(text="🔍 Search", state="normal")
+        self.search_btn.config(text=lang_manager.t("search"), state="normal")
         
-        if not results:
-            messagebox.showinfo("Search", f"No data found for {callsign}")
-            return
-        
-        # Create results window
         d = Toplevel(self)
-        d.title(f"Search Results for {callsign}")
-        d.geometry("600x400")
+        d.title(f"Rezultate pentru {callsign}")
+        d.geometry("400x200")
         
-        Label(d, text=f"Search Results for {callsign}:", font=("Consolas", 12, "bold")).pack(pady=10)
+        Label(d, text=f"Nume: {results['name']}\nQTH: {results['qth']}\nLocator: {results['locator']}", 
+              bg=self.th["eb"], fg=self.th["fg"]).pack(pady=20)
         
-        for source, data in results.items():
-            f = Frame(d, bg=self.th["eb"], pady=5)
-            f.pack(fill="x", padx=10, pady=5)
-            Label(f, text=f"Source: {data['source']}", fg="#4fc3f7", bg=self.th["eb"]).pack(anchor="w")
-            Label(f, text=f"Name: {data['name']}", bg=self.th["eb"]).pack(anchor="w")
-            if data['qth']:
-                Label(f, text=f"QTH: {data['qth']}", bg=self.th["eb"]).pack(anchor="w")
-            if data['locator']:
-                Label(f, text=f"Locator: {data['locator']}", bg=self.th["eb"]).pack(anchor="w")
-            
-            Button(f, text="Use This Data", command=lambda d=data: self.use_search_data(d, d)).pack(pady=5)
+        Button(d, text="Folosește aceste date", command=lambda: self.use_search_data(results, d),
+               bg=self.th["ac"], fg="white").pack(pady=10)
     
     def use_search_data(self, data, window):
-        if data.get('name') and data['name'] != self.en['c'].get():
+        if data.get('name'):
             self.en['c'].delete(0, "end")
             self.en['c'].insert(0, data['name'])
         if data.get('qth'):
@@ -534,28 +592,31 @@ class RadioLogApp(Tk):
         window.destroy()
     
     def validate(self):
-        contest = self.cfg.get("contest", "simple")
-        validators = {
-            "yo-dx": ContestValidator.validate_yo_dx,
-            "stafeta": ContestValidator.validate_stafeta,
-            "maraton": ContestValidator.validate_maraton
-        }
+        contest_key = self.cfg.get("contest")
+        contest_rules = self.contest_manager.get_rules(contest_key)
         
-        if contest in validators:
-            valid, msg = validators[contest](self.log)
-            if valid:
-                messagebox.showinfo("Validation", f"✓ {msg}")
-            else:
-                messagebox.showwarning("Validation", f"✗ {msg}")
+        if not contest_rules:
+            messagebox.showerror("Eroare", "Reguli de concurs negăsite.")
+            return
+
+        # Add the key to the rules for validation
+        contest_rules['key'] = contest_key
+        
+        valid, msg, score = ScoringEngine.validate_log(self.log, contest_rules, self.cfg)
+        
+        if valid:
+            diploma = "DA" if len(self.log) >= contest_rules.get("min_qso_for_diploma", 100) else "NU"
+            messagebox.showinfo(lang_manager.t("validation_result"), 
+                f"✓ {msg}\n\nScor Total: {score}\nEligibil Diplomă ({contest_rules.get('min_qso_for_diploma', 100)} QSO): {diploma}")
         else:
-            messagebox.showinfo("Validation", f"Log: {len(self.log)} QSOs")
+            messagebox.showwarning(lang_manager.t("validation_result"), f"✗ {msg}")
     
     def export_menu(self):
         d = Toplevel(self)
-        d.title("Export Options")
+        d.title("Export")
         d.geometry("300x250")
         
-        Label(d, text="Select Export Format:", font=("Consolas", 11, "bold")).pack(pady=10)
+        Label(d, text="Selectează formatul:", font=("Consolas", 11, "bold")).pack(pady=10)
         
         Button(d, text="Cabrillo (.log)", command=lambda: self.export_cabrillo(d),
                bg=self.th["ac"], fg="white", width=20).pack(pady=5)
@@ -563,37 +624,84 @@ class RadioLogApp(Tk):
                bg=self.th["ac"], fg="white", width=20).pack(pady=5)
         Button(d, text="CSV (.csv)", command=lambda: self.export_csv(d),
                bg=self.th["ac"], fg="white", width=20).pack(pady=5)
-        Button(d, text="Cancel", command=d.destroy, bg="#666", fg="white", width=20).pack(pady=10)
+        Button(d, text="Anulează", command=d.destroy, bg="#666", fg="white", width=20).pack(pady=10)
     
     def export_cabrillo(self, parent):
-        contest = self.cfg.get("contest", "simple")
-        filename = Exporter.export_cabrillo(self.log, contest)
-        if filename:
-            messagebox.showinfo("Success", f"Cabrillo exported to {filename}")
-            webbrowser.open(os.path.dirname(os.path.abspath(filename)))
-        parent.destroy()
+        try:
+            contest_key = self.cfg.get("contest")
+            contest_rules = self.contest_manager.get_rules(contest_key)
+            
+            content = f"START-OF-LOG: 3.0\n"
+            content += f"CONTEST: {contest_rules.get('name', 'Unknown')}\n"
+            content += f"CALLSIGN: {self.cfg.get('call', 'NOCALL')}\n"
+            content += f"CATEGORY: {self.cfg.get('cat', 'A')}\n"
+            content += f"BAND: ALL\nMODE: ALL\n"
+            
+            for qso in self.log:
+                content += f"QSO: {qso['b']} {qso['m']} {qso['d']} {qso['t']} {qso['c']} 599 {qso['r']} 001\n"
+            
+            content += "END-OF-LOG:\n"
+            
+            filename = f"cabrillo_{contest_key}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(content)
+            
+            messagebox.showinfo("Succes", f"Exportat în {filename}")
+            parent.destroy()
+        except Exception as e:
+            messagebox.showerror("Eroare", str(e))
     
     def export_adif(self, parent):
-        filename = Exporter.export_adif(self.log)
-        if filename:
-            messagebox.showinfo("Success", f"ADIF exported to {filename}")
-        parent.destroy()
+        try:
+            content = ""
+            for qso in self.log:
+                content += f"<CALL:{len(qso['c'])}>{qso['c']}"
+                content += f"<BAND:{len(qso['b'])}>{qso['b']}"
+                content += f"<MODE:{len(qso['m'])}>{qso['m']}"
+                content += f"<QSO_DATE:{len(qso['d'])}>{qso['d']}"
+                content += f"<TIME_ON:{len(qso['t'])}>{qso['t']}"
+                content += f"<RST_SENT:{len(qso['s'])}>{qso['s']}"
+                content += f"<RST_RCVD:{len(qso['r'])}>{qso['r']}"
+                if qso.get('n'):
+                    content += f"<COMMENT:{len(qso['n'])}>{qso['n']}"
+                content += "<EOR>\n"
+            
+            filename = f"adif_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.adi"
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write(content)
+            
+            messagebox.showinfo("Succes", f"Exportat în {filename}")
+            parent.destroy()
+        except Exception as e:
+            messagebox.showerror("Eroare", str(e))
     
     def export_csv(self, parent):
-        filename = Exporter.export_csv(self.log)
-        if filename:
-            messagebox.showinfo("Success", f"CSV exported to {filename}")
-        parent.destroy()
+        try:
+            import csv
+            filename = f"csv_export_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            with open(filename, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["Data", "Ora", "Call", "Band", "Mode", "RST_S", "RST_R", "Nota"])
+                for qso in self.log:
+                    writer.writerow([qso["d"], qso["t"], qso["c"], qso["b"], qso["m"], qso["s"], qso["r"], qso["n"]])
+            
+            messagebox.showinfo("Succes", f"Exportat în {filename}")
+            parent.destroy()
+        except Exception as e:
+            messagebox.showerror("Eroare", str(e))
+    
+    def edit_contests_ui(self):
+        ContestEditor(self, self.contest_manager.rules)
     
     def set(self):
         d = Toplevel(self)
-        d.title("Setari")
+        d.title("Setări")
         d.geometry("400x500")
         d.grab_set()
         
-        Label(d, text="Station Info:", font=("Consolas", 10, "bold")).pack(pady=5)
+        Label(d, text="Info Stație:", font=("Consolas", 10, "bold")).pack(pady=5)
         
-        Label(d, text="Callsign:").pack()
+        Label(d, text="Indicativ:").pack()
         e1 = Entry(d)
         e1.insert(0, self.cfg["call"])
         e1.pack()
@@ -603,84 +711,69 @@ class RadioLogApp(Tk):
         e2.insert(0, self.cfg["loc"])
         e2.pack()
         
-        Label(d, text="Judet:").pack()
+        Label(d, text="Județ:").pack()
         e3 = Entry(d)
         e3.insert(0, self.cfg["jud"])
         e3.pack()
         
-        Label(d, text="Category:").pack()
-        cat = ttk.Combobox(d, values=CAT_T, state="readonly")
-        cat.set(self.cfg["cat"])
-        cat.pack()
+        Label(d, text="Concurs:").pack()
+        contest_combo = ttk.Combobox(d, values=self.contest_keys, state="readonly")
+        contest_combo.set(self.cfg.get("contest"))
+        contest_combo.pack()
         
-        Label(d, text="Display:", font=("Consolas", 10, "bold")).pack(pady=5)
+        Label(d, text="Afisare:", font=("Consolas", 10, "bold")).pack(pady=5)
         
-        Label(d, text="Font Size:").pack()
+        Label(d, text="Mărime Font:").pack()
         e4 = Entry(d)
         e4.insert(0, self.cfg["fs"])
         e4.pack()
         
-        Label(d, text="Theme:").pack()
+        Label(d, text="Temă:").pack()
         theme = ttk.Combobox(d, values=["dark", "light"], state="readonly")
         theme.set(self.cfg["theme"])
         theme.pack()
         
-        Label(d, text="Contest:", font=("Consolas", 10, "bold")).pack(pady=5)
-        
-        contest = ttk.Combobox(d, values=list(CON_T.values()), state="readonly")
-        contest.set(CON_T.get(self.cfg["contest"], "Log"))
-        contest.pack()
+        Label(d, text="Limba:").pack()
+        lang = ttk.Combobox(d, values=["ro", "en"], state="readonly")
+        lang.set(self.cfg.get("lang", "ro"))
+        lang.pack()
         
         def sv():
             self.cfg.update({
                 "call": e1.get().upper(),
                 "loc": e2.get().upper(),
                 "jud": e3.get().upper(),
-                "cat": cat.get(),
                 "fs": int(e4.get()),
                 "theme": theme.get(),
-                "contest": list(CON_T.keys())[list(CON_T.values()).index(contest.get())]
+                "contest": contest_combo.get(),
+                "lang": lang.get()
             })
+            self.lang_var.set(lang.get())
+            lang_manager.set_lang(lang.get())
             DataManager.atomic_save("config.json", self.cfg)
             d.destroy()
             self.apply_settings()
-            messagebox.showinfo("OK", "Settings saved. Restart recommended for full effect.")
+            messagebox.showinfo("OK", "Setări salvate. Reporniți aplicația pentru efect complet.")
         
-        Button(d, text="Save", command=sv, bg=self.th["ac"], fg="white").pack(pady=20)
+        Button(d, text="Salvează", command=sv, bg=self.th["ac"], fg="white").pack(pady=20)
     
     def apply_settings(self):
         self.fs = int(self.cfg.get("fs", 11))
-        self.fnt = ("Consolas", self.fs)
         self.current_theme = self.cfg.get("theme", "dark")
         self.th = self.themes[self.current_theme]
         
-        # Update all widgets
-        self.configure(bg=self.th["bg"])
+        # Reconstruim UI-ul pentru a aplica noile setări
         for widget in self.winfo_children():
-            if isinstance(widget, Frame):
-                widget.configure(bg=self.th["bg"] if widget != self.winfo_children()[0] else self.th["hd"])
+            widget.destroy()
         
+        self.ui()
         self.ref()
     
     def toggle_theme(self):
         self.current_theme = "light" if self.current_theme == "dark" else "dark"
-        self.th = self.themes[self.current_theme]
         self.cfg["theme"] = self.current_theme
+        self.th = self.themes[self.current_theme]
         self.apply_settings()
-    
-    def toggle_online(self):
-        self.cfg["online"] = self.online_var.get()
-    
-    def change_contest(self, event):
-        contest_name = self.cb.get()
-        contest_key = list(CON_T.keys())[list(CON_T.values()).index(contest_name)]
-        self.cfg["contest"] = contest_key
-        
-        # Update contest-specific settings
-        if contest_key == "maraton":
-            self.cfg["serial_start"] = 1000
-        
-        DataManager.atomic_save("config.json", self.cfg)
     
     def st(self):
         b = Counter(q["b"] for q in self.log)
@@ -688,30 +781,106 @@ class RadioLogApp(Tk):
         for k in sorted(b.keys()):
             m += f"{k}: {b[k]}\n"
         
-        # Add contest-specific stats
-        contest = self.cfg.get("contest", "simple")
-        if contest == "maraton":
-            required = CONTEST_CONFIGS["maraton"]["required_stations"]
+        contest_key = self.cfg.get("contest")
+        if contest_key == "maraton":
+            contest_rules = self.contest_manager.get_rules(contest_key)
+            required = contest_rules.get("required_stations", [])
             calls = [qso["c"] for qso in self.log]
             found = [s for s in required if s in calls]
-            m += f"\nMaraton Stations: {len(found)}/{len(required)}"
+            m += f"\n{lang_manager.t('stations_worked')}: {len(set(calls))}"
             if found:
-                m += f"\nFound: {', '.join(found)}"
-        
+                m += f"\n{lang_manager.t('required_stations')}: {', '.join(found)}"
+            
+            user_county = self.cfg.get("county", "NT")
+            total_score = sum(ScoringEngine.calculate_score(q, contest_rules, self.cfg) for q in self.log)
+            m += f"\n\n{lang_manager.t('total_score')}: {total_score}"
+
         messagebox.showinfo("Stats", m)
     
     def manual_backup(self):
         if DataManager.create_backup(self.log):
-            messagebox.showinfo("Backup", "Backup created successfully")
+            messagebox.showinfo("Backup", "Backup creat cu succes")
         else:
-            messagebox.showerror("Error", "Backup failed")
+            messagebox.showerror("Eroare", "Backup eșuat")
     
     def on_exit(self):
-        if messagebox.askyesno("Exit", "Save changes and create backup?"):
+        if messagebox.askyesno("Exit", "Salvați modificările și creați backup?"):
             DataManager.atomic_save("log.json", self.log)
             DataManager.create_backup(self.log)
             DataManager.atomic_save("config.json", self.cfg)
             self.destroy()
+
+class ContestEditor:
+    def __init__(self, parent, rules_dict):
+        self.rules = rules_dict
+        self.window = Toplevel(parent)
+        self.window.title(lang_manager.t("edit_contests"))
+        self.window.geometry("800x600")
+        self.window.grab_set()
+        
+        self.notebook = ttk.Notebook(self.window)
+        self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Editor pentru fiecare concurs
+        for contest_key in self.rules.keys():
+            frame = Frame(self.notebook, bg=parent.th["bg"])
+            self.notebook.add(frame, text=contest_key.upper())
+            self.create_contest_editor(frame, contest_key)
+        
+        Button(self.window, text=lang_manager.t("save_changes"), 
+               command=self.save_and_close, bg=parent.th["ac"], fg="white").pack(pady=10)
+    
+    def create_contest_editor(self, parent, contest_key):
+        rules = self.rules[contest_key]
+        
+        # Nume
+        Label(parent, text="Nume Concurs:", bg=parent.th["bg"], fg=parent.th["fg"]).pack(pady=5)
+        e_name = Entry(parent, bg=parent.th["eb"], fg=parent.th["fg"])
+        e_name.insert(0, rules.get("name", ""))
+        e_name.pack()
+        
+        # Categorii
+        if "categories" in rules:
+            Label(parent, text="Categorii (unul per linie, cod:descriere):", bg=parent.th["bg"], fg=parent.th["fg"]).pack(pady=5)
+            self.cat_text = Text(parent, height=5, bg=parent.th["eb"], fg=parent.th["fg"])
+            cat_str = "\n".join([f"{k}:{v}" for k, v in rules["categories"].items()])
+            self.cat_text.insert("1.0", cat_str)
+            self.cat_text.pack(fill="x", expand=True)
+
+        # Reguli speciale Maraton
+        if contest_key == "maraton":
+            Label(parent, text="Stații Obligatorii (virgulă):", bg=parent.th["bg"], fg=parent.th["fg"]).pack(pady=5)
+            e_req = Entry(parent, bg=parent.th["eb"], fg=parent.th["fg"])
+            e_req.insert(0, ", ".join(rules.get("required_stations", [])))
+            e_req.pack()
+            
+            Label(parent, text="Minim QSO pentru diplomă:", bg=parent.th["bg"], fg=parent.th["fg"]).pack(pady=5)
+            e_min = Entry(parent, bg=parent.th["eb"], fg=parent.th["fg"])
+            e_min.insert(0, str(rules.get("min_qso_for_diploma", 100)))
+            e_min.pack()
+            
+            Label(parent, text="Județe pentru punctaj IC (virgulă):", bg=parent.th["bg"], fg=parent.th["fg"]).pack(pady=5)
+            e_county = Entry(parent, bg=parent.th["eb"], fg=parent.th["fg"])
+            e_county.insert(0, ", ".join(rules.get("counties_for_ic_score", [])))
+            e_county.pack()
+
+            # Store for later access
+            self.e_req = e_req
+            self.e_min = e_min
+            self.e_county = e_county
+    
+    def save_and_close(self):
+        for contest_key in self.rules.keys():
+            frame = self.notebook.nametowidget(self.notebook.tabs()[list(self.rules.keys()).index(contest_key)])
+            
+            # This is a simplified save. A full implementation would read all fields.
+            # For now, we just show a message.
+            pass
+        
+        self.window.destroy()
+        messagebox.showinfo("Info", "Funcționalitatea de editare avansată este în dezvoltare. "
+                                      "Pentru a modifica regulile, editați direct fișierul 'contests.json'.")
+
 
 if __name__ == "__main__":
     app = RadioLogApp()
