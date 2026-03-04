@@ -44,7 +44,7 @@
 ### 📝 Logging Avansat / Advanced QSO Logging
 
 - **Introducere rapidă** prin tastatură — câmpuri în ordine logică (callsign → RST → schimb)
-- **Validare în timp real** a callsign-urilor (format, prefixe YO, sufixe speciale `/IC`, `/P`, `/M`)
+- **Validare în timp real** a callsign-urilor (format, prefixe YO, sufixe speciale `/IC`, `/IL`, `/J`)
 - **Deduplicare automată** — alertă la dubluri (dupe) cu opțiune de confirmare manuală
 - **Căutare online** callsign cu afișare informații QRZ / HamDB *(Online Search)*
 - **UTC sync automat** — ora se preia din sistemul local și se afișează în timp real
@@ -55,7 +55,7 @@ Motor de reguli modular care implementează complet punctajul **Maratonul Radioa
 
 ```
 Stație normală:          1 punct / QSO pe bandă nouă
-Stație /IC sau /YR8TGN: 5 puncte / QSO (bonus operator special)
+Stație /IC sau /YR8TGN: 5/20 puncte / QSO (bonus operator special)
 Multiplicator:           Fiecare județ YO nou per bandă
 ```
 
@@ -105,8 +105,8 @@ Multiplicator:           Fiecare județ YO nou per bandă
 ├─────────────────────────────────────────────────────┤
 │ #  │ UTC   │ Callsign │ Band │ RST  │ Exch │ Pts    │
 │ 1  │ 14:20 │ YO8ABC   │ 40m  │ 59/59│ IS   │  1     │
-│ 2  │ 14:25 │ YR8TGN/IC│ 40m  │ 59/59│ TL   │  5 ★  │
-│ 3  │ 14:31 │ YP8IC    │ 40m  │ 59/59│ IS   │  5 ★  │
+│ 2  │ 14:25 │ YR8TGN/IC│ 40m  │ 59/59│ TL   │ 20/5 ★│
+│ 3  │ 14:31 │ YP8IC    │ 40m  │ 59/59│ IS   │  20 ★ │
 ├─────────────────────────────────────────────────────┤
 │  QSO Total: 3 │ Valid: 3 │ Mult: 2 │ SCORE: 33      │
 └─────────────────────────────────────────────────────┘
@@ -510,7 +510,7 @@ Consultă [CONTRIBUTING.md](CONTRIBUTING.md) pentru ghidul complet de contribuț
 Distribuit sub licența **MIT**. Vezi [LICENSE](LICENSE) pentru detalii complete.
 
 ```
-MIT License — Copyright (c) 2024 YO Log PRO Contributors
+MIT License — Copyright (c) 2026 YO Log PRO Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -525,8 +525,8 @@ copies of the Software...
 
 | | |
 |---|---|
-| 📧 **Email** | `yo8xxx@example.com` |
-| 🌐 **Website** | `https://yologpro.ro` *(în construcție)* |
+| 📧 **Email** | `yo8acr@gmail.com` |
+| 🌐 **Website** | `` *(în construcție)* |
 | 💬 **Forum YO** | [radioamatori.ro](https://radioamatori.ro) |
 | 🐛 **Bug Reports** | [GitHub Issues](https://github.com/youruser/yologpro/issues) |
 | 📢 **Anunțuri** | [GitHub Discussions](https://github.com/youruser/yologpro/discussions) |
@@ -535,7 +535,7 @@ copies of the Software...
 
 <div align="center">
 
-**73 de YO8XXX** 📻
+**73 de YO8ACR** 📻
 
 *Făcut cu ❤️ pentru comunitatea radioamatorilor din România*  
 *Made with ❤️ for the Romanian amateur radio community*
