@@ -98,7 +98,7 @@ class Loc:
         return False
 
 # =============================================================================
-# DXCC DATABASE (150+ prefixes)
+# DXCC DATABASE
 # =============================================================================
 
 class DXCC:
@@ -1343,7 +1343,7 @@ class App(tk.Tk):
 
         # Bindings
         self.protocol("WM_DELETE_WINDOW", self._exit)
-        # FIX: Global Enter binding to force logging
+        # FIX: Global Enter binding
         self.bind('<Return>', lambda e: self._add_qso())
         self.bind('<Control-f>', lambda e: self._search_dlg())
         self.bind('<Control-F>', lambda e: self._search_dlg())
@@ -1513,7 +1513,6 @@ class App(tk.Tk):
                                     font=("Consolas", self.fs + 2, "bold"),
                                     insertbackground=TH["fg"], justify="center")
         self.ent["call"].pack(ipady=3)
-        # FIX: Bind KeyRelease for Uppercase visual enforcement
         self.ent["call"].bind("<KeyRelease>", self._on_call_key)
         self.wb_lbl = tk.Label(cf, text="", bg=TH["bg"], fg=TH["err"], font=("Consolas", 9))
         self.wb_lbl.pack()
@@ -1718,7 +1717,7 @@ class App(tk.Tk):
             (L.t("backup"), self._bak, "#607D8B"),
         ]
         for txt, cmd, col in btns:
-            # FIX: Explicitly set activebackground and activeforeground to fix visibility issues
+            # FIX: Explicit active colors for visibility
             tk.Button(bb, text=txt, command=cmd, bg=col, fg="white",
                       activebackground=col, activeforeground="white",
                       font=("Consolas", 10), width=11, cursor="hand2").pack(side="left", padx=2)
@@ -2192,7 +2191,7 @@ class App(tk.Tk):
     def _about(self):
         d = tk.Toplevel(self)
         d.title(L.t("about"))
-        d.geometry("500x400") # FIX: Increased size for visibility
+        d.geometry("500x400")
         d.resizable(False, False)
         d.configure(bg=TH["bg"])
         d.transient(self)
@@ -2266,4 +2265,200 @@ class App(tk.Tk):
             self.cfg["loc"] = es["loc"].get().upper().strip()
             self.cfg["jud"] = es["jud"].get().upper().strip()
             self.cfg["addr"] = es["addr"].get().strip()
-            self.cfg["
+            self.cfg["op_name"] = es["op_name"].get().strip()
+            self.cfg["power"] = es["power"].get().strip()
+            self.cfg["sounds"] = sv.get()
+            try:
+                self.cfg["fs"] = int(fs_e.get())
+            except:
+                self.cfg["fs"] = 11
+            DM.save("config.json", self.cfg)
+            self._upd_info()
+            messagebox.showinfo("OK", L.t("sett_ok"))
+            d.destroy()
+
+        tk.Button(d, text=L.t("save"), command=save, bg=TH["accent"], fg="white",
+                  width=12, font=self.fn).pack(pady=10)
+
+    def _search_dlg(self):
+        d = tk.Toplevel(self)
+        d.title(L.t("search_t"))
+        d.geometry("500x380")
+        d.configure(bg=TH["bg"])
+        d.transient(self)
+        d.grab_set()
+        tf = tk.Frame(d, bg=TH["bg"], pady=8)
+        tf.pack(fill="x", padx=8)
+        tk.Label(tf, text=L.t("search_l"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack(
+            side="left")
+        se = tk.Entry(tf, width=22, bg=TH["entry_bg"], fg=TH["fg"], font=("Consolas", 12),
+                      insertbackground=TH["fg"])
+        se.pack(side="left", padx=6)
+        se.focus()
+        rf = tk.Frame(d, bg=TH["bg"])
+        rf.pack(fill="both", expand=True, padx=8, pady=3)
+        cols = ("nr", "call", "band", "mode", "date", "time")
+        tree2 = ttk.Treeview(rf, columns=cols, show="headings", height=12)
+        for c, h, w in zip(cols,
+                           ["#", L.t("call"), L.t("band"), L.t("mode"), L.t("data"), L.t("ora")],
+                           [38, 110, 55, 55, 80, 55]):
+            tree2.heading(c, text=h)
+            tree2.column(c, width=w, anchor="center")
+        tree2.pack(fill="both", expand=True)
+        cl = tk.Label(d, text="", bg=TH["bg"], fg=TH["fg"], font=("Consolas", 10))
+        cl.pack(pady=3)
+
+        def srch(e=None):
+            q = se.get().upper().strip()
+            for i in tree2.get_children():
+                tree2.delete(i)
+            if not q:
+                cl.config(text="")
+                return
+            res = []
+            for i, qso in enumerate(self.log):
+                if q in qso.get("c", "").upper() or q in qso.get("n", "").upper():
+                    res.append((len(self.log) - i, qso))
+            for nr, qso in res:
+                tree2.insert("", "end", values=(nr, qso.get("c", ""), qso.get("b", ""),
+                                                qso.get("m", ""), qso.get("d", ""),
+                                                qso.get("t", "")))
+            cl.config(
+                text=f"{len(res)} {L.t('results').lower()}" if res else L.t("no_res"))
+
+        se.bind("<KeyRelease>", srch)
+
+    def _timer_dlg(self):
+        d = tk.Toplevel(self)
+        d.title(L.t("timer_t"))
+        d.geometry("300x200")
+        d.configure(bg=TH["bg"])
+        d.transient(self)
+        d.resizable(False, False)
+        run = [False]
+        st = [None]
+        f = tk.Frame(d, bg=TH["bg"], pady=8)
+        f.pack(fill="both", expand=True, padx=12)
+        tk.Label(f, text=L.t("dur_h"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack()
+        de = tk.Entry(f, width=8, bg=TH["entry_bg"], fg=TH["fg"], font=("Consolas", 13),
+                      justify="center", insertbackground=TH["fg"])
+        de.insert(0, "4")
+        de.pack(pady=3)
+        el = tk.Label(f, text=L.t("elapsed") + " 00:00:00", bg=TH["bg"], fg=TH["ok"],
+                      font=("Consolas", 14, "bold"))
+        el.pack(pady=2)
+        rl = tk.Label(f, text=L.t("remaining") + " --:--:--", bg=TH["bg"], fg=TH["warn"],
+                      font=("Consolas", 12))
+        rl.pack(pady=2)
+
+        def tick():
+            if run[0] and st[0]:
+                delta = (datetime.datetime.utcnow() - st[0]).total_seconds()
+                hrs = int(delta // 3600)
+                mins = int(delta % 3600 // 60)
+                secs = int(delta % 60)
+                el.config(text=f"{L.t('elapsed')} {hrs:02d}:{mins:02d}:{secs:02d}")
+                try:
+                    dh = float(de.get())
+                except:
+                    dh = 4
+                rem = max(0, dh * 3600 - delta)
+                rh = int(rem // 3600)
+                rm = int(rem % 3600 // 60)
+                rs = int(rem % 60)
+                rl.config(text=f"{L.t('remaining')} {rh:02d}:{rm:02d}:{rs:02d}",
+                          fg=TH["err"] if rem <= 1800 else TH["warn"])
+                if rem <= 0:
+                    beep("warning")
+            d.after(1000, tick)
+
+        def tog():
+            if not run[0]:
+                st[0] = datetime.datetime.utcnow()
+                run[0] = True
+                sbtn.config(text=L.t("timer_stop"), bg=TH["warn"])
+            else:
+                run[0] = False
+                sbtn.config(text=L.t("timer_start"), bg=TH["ok"])
+
+        def rst():
+            run[0] = False
+            st[0] = None
+            el.config(text=L.t("elapsed") + " 00:00:00")
+            rl.config(text=L.t("remaining") + " --:--:--")
+            sbtn.config(text=L.t("timer_start"), bg=TH["ok"])
+
+        bf = tk.Frame(f, bg=TH["bg"])
+        bf.pack(pady=6)
+        sbtn = tk.Button(bf, text=L.t("timer_start"), command=tog, bg=TH["ok"], fg="white",
+                         font=self.fn, width=9, cursor="hand2")
+        sbtn.pack(side="left", padx=4)
+        tk.Button(bf, text=L.t("timer_reset"), command=rst,
+                  bg=TH["err"], fg="white", font=self.fn, width=9, cursor="hand2").pack(
+            side="left", padx=4)
+        tick()
+
+    def _stats(self):
+        StatsWindow(self, self.log, self._cc(), self.cfg)
+
+    def _validate(self):
+        ok, msg, sc = Score.validate(self.log, self._cc(), self.cfg)
+        if ok:
+            mq = self._cc().get("min_qso", 0)
+            if mq > 0:
+                msg += f"\nDiplomă: {'DA/YES' if len(self.log) >= mq else 'NU/NO'}"
+            messagebox.showinfo(L.t("val_result"), msg)
+            beep("success")
+        else:
+            messagebox.showwarning(L.t("val_result"), msg)
+            beep("error")
+
+    # ── Import ───────────────────────────────────────────────────────────────
+
+    def _import_menu(self):
+        d = tk.Toplevel(self)
+        d.title(L.t("import_log"))
+        d.geometry("260x160")
+        d.resizable(False, False)
+        d.configure(bg=TH["bg"])
+        d.transient(self)
+        d.grab_set()
+        tk.Label(d, text=L.t("sel_fmt"), bg=TH["bg"], fg=TH["fg"], font=self.fb).pack(pady=10)
+        tk.Button(d, text=L.t("imp_adif") + " (.adi)",
+                  command=lambda: [d.destroy(), self._import_adif()],
+                  bg=TH["accent"], fg="white", width=20).pack(pady=3)
+        tk.Button(d, text=L.t("imp_csv") + " (.csv)",
+                  command=lambda: [d.destroy(), self._import_csv()],
+                  bg=TH["accent"], fg="white", width=20).pack(pady=3)
+        tk.Button(d, text=L.t("cancel"), command=d.destroy, bg=TH["btn_bg"], fg="white",
+                  width=20).pack(pady=8)
+
+    def _import_adif(self):
+        fp = filedialog.askopenfilename(filetypes=[("ADIF", "*.adi *.adif"), ("All", "*.*")])
+        if not fp:
+            return
+        try:
+            with open(fp, "r", encoding="utf-8", errors="replace") as f:
+                text = f.read()
+            qsos = Importer.parse_adif(text)
+            if qsos:
+                self.log.extend(qsos)
+                self._refresh()
+                DM.save_log(self._cid(), self.log)
+                messagebox.showinfo("OK", L.t("imp_ok").format(len(qsos)))
+            else:
+                messagebox.showwarning(L.t("error"), L.t("no_res"))
+        except Exception as e:
+            messagebox.showerror(L.t("error"), f"{L.t('imp_err')}\n{e}")
+
+    def _import_csv(self):
+        fp = filedialog.askopenfilename(filetypes=[("CSV", "*.csv"), ("All", "*.*")])
+        if not fp:
+            return
+        try:
+            with open(fp, "r", encoding="utf-8", errors="replace") as f:
+                text = f.read()
+            qsos = Importer.parse_csv(text)
+            if qsos:
+                self.log.extend(qsos)
+                self._refresh()
