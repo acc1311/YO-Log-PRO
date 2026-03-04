@@ -9,8 +9,10 @@ import ctypes
 import threading
 from pathlib import Path
 from collections import Counter
-from tkinter import (Tk, Toplevel, Frame, Label, Entry, Button, 
-    ttk, messagebox, Scrollbar, Listbox, Checkbutton, Radiobutton, Scale)
+
+# --- IMPORT TKINTER CORECTAT ---
+import tkinter as tk
+from tkinter import ttk, messagebox, Scrollbar, Listbox
 
 # --- CONFIGURARE PENTRU PYINSTALLER ---
 def resource_path(relative_path):
@@ -266,7 +268,7 @@ class ContestManager:
         self.rules = new_rules
         DataManager.atomic_save(resource_path("contests.json"), self.rules)
 
-class RadioLogApp(Tk):
+class RadioLogApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(lang_manager.t("app_title"))
@@ -300,7 +302,7 @@ class RadioLogApp(Tk):
         self.protocol("WM_DELETE_WINDOW", self.on_exit)
     
     def ui(self):
-        h = Frame(self, bg=self.th["hd"], pady=5)
+        h = tk.Frame(self, bg=self.th["hd"], pady=5)
         h.pack(fill="x")
         
         self.lang_var = tk.StringVar(value=self.cfg.get("lang", "ro"))
@@ -308,7 +310,7 @@ class RadioLogApp(Tk):
         self.lang_menu.bind("<<ComboboxSelected>>", self.change_lang)
         self.lang_menu.pack(side="left", padx=5)
         
-        Label(h, text="YO Log PRO", font=("Consolas", self.fs+4, "bold"), fg="#4fc3f7", bg=self.th["hd"]).pack(side="left", padx=10)
+        tk.Label(h, text="YO Log PRO", font=("Consolas", self.fs+4, "bold"), fg="#4fc3f7", bg=self.th["hd"]).pack(side="left", padx=10)
         
         self.contest_keys = self.contest_manager.get_all_contest_keys()
         self.cb = ttk.Combobox(h, values=self.contest_keys, state="readonly", width=15)
@@ -316,14 +318,14 @@ class RadioLogApp(Tk):
         self.cb.bind("<<ComboboxSelected>>", self.change_contest)
         self.cb.pack(side="left", padx=5)
         
-        self.inf = Label(h, text="", fg="#81c784", bg=self.th["hd"])
+        self.inf = tk.Label(h, text="", fg="#81c784", bg=self.th["hd"])
         self.inf.pack(side="left", padx=20)
         self.update_info_bar()
         
-        self.theme_btn = Button(h, text="☀/🌙", command=self.toggle_theme, bg=self.th["ac"], fg="white")
+        self.theme_btn = tk.Button(h, text="☀/🌙", command=self.toggle_theme, bg=self.th["ac"], fg="white")
         self.theme_btn.pack(side="right", padx=5)
         
-        f = Frame(self, bg=self.th["bg"], pady=10)
+        f = tk.Frame(self, bg=self.th["bg"], pady=10)
         f.pack(fill="x")
         
         self.en = {}
@@ -337,9 +339,9 @@ class RadioLogApp(Tk):
         ]
         
         for i, (l, k, w) in enumerate(fields):
-            px = Frame(f, bg=self.th["bg"])
+            px = tk.Frame(f, bg=self.th["bg"])
             px.grid(row=0, column=i, padx=5)
-            Label(px, text=l, fg="#bbb", bg=self.th["bg"]).pack()
+            tk.Label(px, text=l, fg="#bbb", bg=self.th["bg"]).pack()
             
             if k == "b":
                 e = ttk.Combobox(px, values=BANDS, width=w, state="readonly")
@@ -348,7 +350,7 @@ class RadioLogApp(Tk):
                 e = ttk.Combobox(px, values=MODES, width=w, state="readonly")
                 e.set("SSB")
             else:
-                e = Entry(px, width=w, bg=self.th["eb"], fg=self.th["fg"], 
+                e = tk.Entry(px, width=w, bg=self.th["eb"], fg=self.th["fg"], 
                          insertbackground=self.th["fg"])
                 if k in ["s", "r"]:
                     e.insert(0, "59")
@@ -356,18 +358,18 @@ class RadioLogApp(Tk):
             e.pack()
             self.en[k] = e
         
-        self.search_btn = Button(f, text=lang_manager.t("search"), command=self.search_online, 
+        self.search_btn = tk.Button(f, text=lang_manager.t("search"), command=self.search_online, 
                                 bg=self.th["ac"], fg="white")
         self.search_btn.grid(row=0, column=len(fields), padx=5)
         
-        self.bl = Button(f, text=lang_manager.t("log"), command=self.do_l, bg=self.th["ac"], fg="white")
+        self.bl = tk.Button(f, text=lang_manager.t("log"), command=self.do_l, bg=self.th["ac"], fg="white")
         self.bl.grid(row=0, column=len(fields)+1, padx=10)
         
-        self.dynamic_controls_frame = Frame(f, bg=self.th["bg"])
+        self.dynamic_controls_frame = tk.Frame(f, bg=self.th["bg"])
         self.dynamic_controls_frame.grid(row=1, column=0, columnspan=8, pady=10)
         self.update_dynamic_controls()
         
-        t_f = Frame(self)
+        t_f = tk.Frame(self)
         t_f.pack(fill="both", expand=True, padx=10, pady=5)
         
         cols = [lang_manager.t("call"), lang_manager.t("band"), lang_manager.t("mode"), 
@@ -380,22 +382,22 @@ class RadioLogApp(Tk):
         
         self.tr.pack(side="left", fill="both", expand=True)
         
-        sb = Scrollbar(t_f, command=self.tr.yview)
+        sb = tk.Scrollbar(t_f, command=self.tr.yview)
         sb.pack(side="right", fill="y")
         self.tr.config(yscrollcommand=sb.set)
         
         self.tr.bind("<Double-1>", self.ed)
         
-        bt = Frame(self, bg=self.th["hd"])
+        bt = tk.Frame(self, bg=self.th["hd"])
         bt.pack(fill="x")
         
-        Button(bt, text=lang_manager.t("settings"), command=self.set).pack(side="left", padx=10)
-        Button(bt, text=lang_manager.t("stats"), command=self.st).pack(side="left")
-        Button(bt, text=lang_manager.t("validate"), command=self.validate).pack(side="left", padx=10)
-        Button(bt, text=lang_manager.t("export"), command=self.export_menu).pack(side="left", padx=10)
-        Button(bt, text=lang_manager.t("edit_contests"), command=self.edit_contests_ui).pack(side="left", padx=10)
-        Button(bt, text=lang_manager.t("delete"), command=self.dl).pack(side="right", padx=10)
-        Button(bt, text=lang_manager.t("backup"), command=self.manual_backup).pack(side="right", padx=5)
+        tk.Button(bt, text=lang_manager.t("settings"), command=self.set).pack(side="left", padx=10)
+        tk.Button(bt, text=lang_manager.t("stats"), command=self.st).pack(side="left")
+        tk.Button(bt, text=lang_manager.t("validate"), command=self.validate).pack(side="left", padx=10)
+        tk.Button(bt, text=lang_manager.t("export"), command=self.export_menu).pack(side="left", padx=10)
+        tk.Button(bt, text=lang_manager.t("edit_contests"), command=self.edit_contests_ui).pack(side="left", padx=10)
+        tk.Button(bt, text=lang_manager.t("delete"), command=self.dl).pack(side="right", padx=10)
+        tk.Button(bt, text=lang_manager.t("backup"), command=self.manual_backup).pack(side="right", padx=5)
     
     def update_info_bar(self):
         contest_rules = self.contest_manager.get_rules(self.cfg.get("contest"))
@@ -417,16 +419,16 @@ class RadioLogApp(Tk):
             return
 
         if contest_key == "maraton" and "categories" in rules:
-            f = Frame(self.dynamic_controls_frame, bg=self.th["bg"])
+            f = tk.Frame(self.dynamic_controls_frame, bg=self.th["bg"])
             f.pack(fill="x", pady=5)
             
-            Label(f, text=lang_manager.t("enter_county"), bg=self.th["bg"], fg=self.th["fg"]).pack(side="left", padx=5)
+            tk.Label(f, text=lang_manager.t("enter_county"), bg=self.th["bg"], fg=self.th["fg"]).pack(side="left", padx=5)
             
             self.county_var = tk.StringVar(value=self.cfg.get("county", "NT"))
             county_combo = ttk.Combobox(f, textvariable=self.county_var, values=["NT", "IS", "OTHER"], state="readonly", width=5)
             county_combo.pack(side="left", padx=5)
             
-            Label(f, text=lang_manager.t("category"), bg=self.th["bg"], fg=self.th["fg"]).pack(side="left", padx=5)
+            tk.Label(f, text=lang_manager.t("category"), bg=self.th["bg"], fg=self.th["fg"]).pack(side="left", padx=5)
             
             self.cat_var = tk.StringVar(value=self.cfg.get("cat", "A"))
             cat_combo = ttk.Combobox(f, textvariable=self.cat_var, values=list(rules["categories"].keys()), state="readonly", width=3)
@@ -439,7 +441,7 @@ class RadioLogApp(Tk):
                 self.update_info_bar()
                 messagebox.showinfo("OK", "Setări Maraton actualizate")
             
-            Button(f, text="💾", command=save_maraton_settings, bg=self.th["ac"], fg="white").pack(side="left", padx=5)
+            tk.Button(f, text="💾", command=save_maraton_settings, bg=self.th["ac"], fg="white").pack(side="left", padx=5)
 
     def change_lang(self, event):
         lang = self.lang_var.get()
@@ -562,14 +564,14 @@ class RadioLogApp(Tk):
     def show_search_results(self, results, callsign):
         self.search_btn.config(text=lang_manager.t("search"), state="normal")
         
-        d = Toplevel(self)
+        d = tk.Toplevel(self)
         d.title(f"Rezultate pentru {callsign}")
         d.geometry("400x200")
         
-        Label(d, text=f"Nume: {results['name']}\nQTH: {results['qth']}\nLocator: {results['locator']}", 
+        tk.Label(d, text=f"Nume: {results['name']}\nQTH: {results['qth']}\nLocator: {results['locator']}", 
               bg=self.th["eb"], fg=self.th["fg"]).pack(pady=20)
         
-        Button(d, text="Folosește aceste date", command=lambda: self.use_search_data(results, d),
+        tk.Button(d, text="Folosește aceste date", command=lambda: self.use_search_data(results, d),
                bg=self.th["ac"], fg="white").pack(pady=10)
     
     def use_search_data(self, data, window):
@@ -601,19 +603,19 @@ class RadioLogApp(Tk):
             messagebox.showwarning(lang_manager.t("validation_result"), f"✗ {msg}")
     
     def export_menu(self):
-        d = Toplevel(self)
+        d = tk.Toplevel(self)
         d.title("Export")
         d.geometry("300x250")
         
-        Label(d, text="Selectează formatul:", font=("Consolas", 11, "bold")).pack(pady=10)
+        tk.Label(d, text="Selectează formatul:", font=("Consolas", 11, "bold")).pack(pady=10)
         
-        Button(d, text="Cabrillo (.log)", command=lambda: self.export_cabrillo(d),
+        tk.Button(d, text="Cabrillo (.log)", command=lambda: self.export_cabrillo(d),
                bg=self.th["ac"], fg="white", width=20).pack(pady=5)
-        Button(d, text="ADIF 3.1.0 (.adi)", command=lambda: self.export_adif(d),
+        tk.Button(d, text="ADIF 3.1.0 (.adi)", command=lambda: self.export_adif(d),
                bg=self.th["ac"], fg="white", width=20).pack(pady=5)
-        Button(d, text="CSV (.csv)", command=lambda: self.export_csv(d),
+        tk.Button(d, text="CSV (.csv)", command=lambda: self.export_csv(d),
                bg=self.th["ac"], fg="white", width=20).pack(pady=5)
-        Button(d, text="Anulează", command=d.destroy, bg="#666", fg="white", width=20).pack(pady=10)
+        tk.Button(d, text="Anulează", command=d.destroy, bg="#666", fg="white", width=20).pack(pady=10)
     
     def export_cabrillo(self, parent):
         try:
@@ -683,46 +685,46 @@ class RadioLogApp(Tk):
         ContestEditor(self, self.contest_manager.rules)
     
     def set(self):
-        d = Toplevel(self)
+        d = tk.Toplevel(self)
         d.title("Setări")
         d.geometry("400x500")
         d.grab_set()
         
-        Label(d, text="Info Stație:", font=("Consolas", 10, "bold")).pack(pady=5)
+        tk.Label(d, text="Info Stație:", font=("Consolas", 10, "bold")).pack(pady=5)
         
-        Label(d, text="Indicativ:").pack()
-        e1 = Entry(d)
+        tk.Label(d, text="Indicativ:").pack()
+        e1 = tk.Entry(d)
         e1.insert(0, self.cfg["call"])
         e1.pack()
         
-        Label(d, text="Locator:").pack()
-        e2 = Entry(d)
+        tk.Label(d, text="Locator:").pack()
+        e2 = tk.Entry(d)
         e2.insert(0, self.cfg["loc"])
         e2.pack()
         
-        Label(d, text="Județ:").pack()
-        e3 = Entry(d)
+        tk.Label(d, text="Județ:").pack()
+        e3 = tk.Entry(d)
         e3.insert(0, self.cfg["jud"])
         e3.pack()
         
-        Label(d, text="Concurs:").pack()
+        tk.Label(d, text="Concurs:").pack()
         contest_combo = ttk.Combobox(d, values=self.contest_keys, state="readonly")
         contest_combo.set(self.cfg.get("contest"))
         contest_combo.pack()
         
-        Label(d, text="Afisare:", font=("Consolas", 10, "bold")).pack(pady=5)
+        tk.Label(d, text="Afisare:", font=("Consolas", 10, "bold")).pack(pady=5)
         
-        Label(d, text="Mărime Font:").pack()
-        e4 = Entry(d)
+        tk.Label(d, text="Mărime Font:").pack()
+        e4 = tk.Entry(d)
         e4.insert(0, self.cfg["fs"])
         e4.pack()
         
-        Label(d, text="Temă:").pack()
+        tk.Label(d, text="Temă:").pack()
         theme = ttk.Combobox(d, values=["dark", "light"], state="readonly")
         theme.set(self.cfg["theme"])
         theme.pack()
         
-        Label(d, text="Limba:").pack()
+        tk.Label(d, text="Limba:").pack()
         lang = ttk.Combobox(d, values=["ro", "en"], state="readonly")
         lang.set(self.cfg.get("lang", "ro"))
         lang.pack()
@@ -744,7 +746,7 @@ class RadioLogApp(Tk):
             self.apply_settings()
             messagebox.showinfo("OK", "Setări salvate. Reporniți aplicația pentru efect complet.")
         
-        Button(d, text="Salvează", command=sv, bg=self.th["ac"], fg="white").pack(pady=20)
+        tk.Button(d, text="Salvează", command=sv, bg=self.th["ac"], fg="white").pack(pady=20)
     
     def apply_settings(self):
         self.fs = int(self.cfg.get("fs", 11))
@@ -801,7 +803,7 @@ class RadioLogApp(Tk):
 class ContestEditor:
     def __init__(self, parent, rules_dict):
         self.rules = rules_dict
-        self.window = Toplevel(parent)
+        self.window = tk.Toplevel(parent)
         self.window.title(lang_manager.t("edit_contests"))
         self.window.geometry("800x600")
         self.window.grab_set()
@@ -810,41 +812,41 @@ class ContestEditor:
         self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
         
         for contest_key in self.rules.keys():
-            frame = Frame(self.notebook, bg=parent.th["bg"])
+            frame = tk.Frame(self.notebook, bg=parent.th["bg"])
             self.notebook.add(frame, text=contest_key.upper())
             self.create_contest_editor(frame, contest_key)
         
-        Button(self.window, text=lang_manager.t("save_changes"), 
+        tk.Button(self.window, text=lang_manager.t("save_changes"), 
                command=self.save_and_close, bg=parent.th["ac"], fg="white").pack(pady=10)
     
     def create_contest_editor(self, parent, contest_key):
         rules = self.rules[contest_key]
         
-        Label(parent, text="Nume Concurs:", bg=parent.th["bg"], fg=parent.th["fg"]).pack(pady=5)
-        e_name = Entry(parent, bg=parent.th["eb"], fg=parent.th["fg"])
+        tk.Label(parent, text="Nume Concurs:", bg=parent.th["bg"], fg=parent.th["fg"]).pack(pady=5)
+        e_name = tk.Entry(parent, bg=parent.th["eb"], fg=parent.th["fg"])
         e_name.insert(0, rules.get("name", ""))
         e_name.pack()
         
         if "categories" in rules:
-            Label(parent, text="Categorii (unul per linie, cod:descriere):", bg=parent.th["bg"], fg=parent.th["fg"]).pack(pady=5)
-            self.cat_text = Text(parent, height=5, bg=parent.th["eb"], fg=parent.th["fg"])
+            tk.Label(parent, text="Categorii (unul per linie, cod:descriere):", bg=parent.th["bg"], fg=parent.th["fg"]).pack(pady=5)
+            self.cat_text = tk.Text(parent, height=5, bg=parent.th["eb"], fg=parent.th["fg"])
             cat_str = "\n".join([f"{k}:{v}" for k, v in rules["categories"].items()])
             self.cat_text.insert("1.0", cat_str)
             self.cat_text.pack(fill="x", expand=True)
 
         if contest_key == "maraton":
-            Label(parent, text="Stații Obligatorii (virgulă):", bg=parent.th["bg"], fg=parent.th["fg"]).pack(pady=5)
-            e_req = Entry(parent, bg=parent.th["eb"], fg=parent.th["fg"])
+            tk.Label(parent, text="Stații Obligatorii (virgulă):", bg=parent.th["bg"], fg=parent.th["fg"]).pack(pady=5)
+            e_req = tk.Entry(parent, bg=parent.th["eb"], fg=parent.th["fg"])
             e_req.insert(0, ", ".join(rules.get("required_stations", [])))
             e_req.pack()
             
-            Label(parent, text="Minim QSO pentru diplomă:", bg=parent.th["bg"], fg=parent.th["fg"]).pack(pady=5)
-            e_min = Entry(parent, bg=parent.th["eb"], fg=parent.th["fg"])
+            tk.Label(parent, text="Minim QSO pentru diplomă:", bg=parent.th["bg"], fg=parent.th["fg"]).pack(pady=5)
+            e_min = tk.Entry(parent, bg=parent.th["eb"], fg=parent.th["fg"])
             e_min.insert(0, str(rules.get("min_qso_for_diploma", 100)))
             e_min.pack()
             
-            Label(parent, text="Județe pentru punctaj IC (virgulă):", bg=parent.th["bg"], fg=parent.th["fg"]).pack(pady=5)
-            e_county = Entry(parent, bg=parent.th["eb"], fg=parent.th["fg"])
+            tk.Label(parent, text="Județe pentru punctaj IC (virgulă):", bg=parent.th["bg"], fg=parent.th["fg"]).pack(pady=5)
+            e_county = tk.Entry(parent, bg=parent.th["eb"], fg=parent.th["fg"])
             e_county.insert(0, ", ".join(rules.get("counties_for_ic_score", [])))
             e_county.pack()
 
@@ -864,3 +866,4 @@ class ContestEditor:
 if __name__ == "__main__":
     app = RadioLogApp()
     app.mainloop()
+ 
