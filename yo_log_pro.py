@@ -1,20 +1,36 @@
-import os, sys, json, re, datetime, shutil, tempfile, ctypes, threading
+import os
+import sys
+import json
+import re
+import datetime
+import shutil
+import tempfile
+import ctypes
+import threading
 from pathlib import Path
 from collections import Counter
 from tkinter import (Tk, Toplevel, Frame, Label, Entry, Button, 
     ttk, messagebox, Scrollbar, Listbox, Checkbutton, Radiobutton, Scale)
-import webbrowser
-import requests
 
-try:
-    ctypes.windll.shcore.SetProcessDpiAwareness(1)
-except:
-    pass
+# --- CONFIGURARE PENTRU PYINSTALLER ---
+def resource_path(relative_path):
+    """
+    Obtine calea absoluta catre resurse, functioneaza atat in mediul de dezvoltare,
+    cat si cand aplicatia este "inghetata" cu PyInstaller.
+    """
+    try:
+        # PyInstaller creeaza un folder temporar si stocheaza acolo path-ul in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        # In mediul de dezvoltare, calea este folderul curent
+        base_path = os.path.abspath(".")
+    
+    return os.path.join(base_path, relative_path)
 
 # --- CONFIGURARE LINGVISTICĂ ---
 LANG = {
     "ro": {
-        "app_title": "YO Log PRO v11.0 - Multi-Contest",
+        "app_title": "YO Log PRO v12.0 - Multi-Contest",
         "call": "Indicativ", "band": "Bandă", "mode": "Mod", "rst_s": "RST S", "rst_r": "RST R", "note": "Notă/Locator",
         "log": "LOG", "update": "ACTUALIZEAZĂ", "search": "🔍 Caută",
         "settings": "Setări", "stats": "Statistici", "validate": "Validează", "export": "Export",
@@ -45,9 +61,10 @@ LANG = {
         "yo_dx_category_a": "A. Single-Op High",
         "yo_dx_category_b": "B. Single-Op Low",
         "yo_dx_category_c": "C. Multi-Op",
+        "log_simplu_name": "Log Simplu (Cursă de Zi)",
     },
     "en": {
-        "app_title": "YO Log PRO v11.0 - Multi-Contest",
+        "app_title": "YO Log PRO v12.0 - Multi-Contest",
         "call": "Call", "band": "Band", "mode": "Mode", "rst_s": "RST S", "rst_r": "RST R", "note": "Note/Locator",
         "log": "LOG", "update": "UPDATE", "search": "🔍 Search",
         "settings": "Settings", "stats": "Stats", "validate": "Validate", "export": "Export",
@@ -78,6 +95,7 @@ LANG = {
         "yo_dx_category_a": "A. Single-Op High",
         "yo_dx_category_b": "B. Single-Op Low",
         "yo_dx_category_c": "C. Multi-Op",
+        "log_simplu_name": "Simple Log (Day Traffic)",
     }
 }
 
@@ -157,15 +175,21 @@ class DataManager:
             os.replace(temp_path, path)
             return True
         except Exception as e:
-            print(f"Error saving: {e}")
+            print(f"Error saving {path}: {e}")
             return False
     
     @staticmethod
     def load_data(path, default):
-        if not Path(path).exists(): return default
+        full_path = resource_path(path)
+        if not Path(full_path).exists():
+            # Dacă fișierul nu există, salvăm valorile implicite
+            if isinstance(default, dict):
+                DataManager.atomic_save(full_path, default)
+            return default
         try:
-            with open(path, encoding="utf-8") as f: return json.load(f)
-        except: return default
+            with open(full_path, encoding="utf-8") as f: return json.load(f)
+        except:
+            return default
 
 class ScoringEngine:
     @staticmethod
@@ -175,40 +199,27 @@ class ScoringEngine:
         scoring_mode = contest_rules.get("scoring_mode", "standard")
         
         if scoring_mode == "maraton_special":
-            # 1. Indicative speciale fixe
             if call in ["YP8IC", "YR8TGN"]:
                 return 20
             
             user_county = user_config.get("county", "NT")
             
-            # 2. Verificare suffix /IC
             if "/IC" in call:
                 if user_county in contest_rules.get("counties_for_ic_score", []):
-                    # Logică simplificată: orice /IC primește 5 pct dacă userul e din zonă
-                    # O regulă mai complexă ar putea distinge club de individual
-                    # Aici, presupunem 5 pct pentru individual și 10 pentru club
-                    # Vom folosi o euristică: dacă call-ul pare de club (ex: YO8KZG), e 10 pct
-                    club_prefixes = ["YO8KZG", "YO8RRC", "YO8K"] # Exemple
+                    club_prefixes = ["YO8KZG", "YO8RRC", "YO8K", "YO8ACR"]
                     is_club = any(call.startswith(p) for p in club_prefixes)
-                    if is_club:
-                        return 10
-                    else:
-                        return 5
-            
-            # 3. Standard
+                    return 10 if is_club else 5
             return 1
             
         elif scoring_mode == "category_based":
-            # Scorul depinde de categoria stației lucrate (simplificat)
-            return 1 # Sau o logică mai complexă
-        
-        else: # standard, yo-dx, etc.
+            return 1
+        else:
             return 1
 
     @staticmethod
     def validate_log(log_data, contest_rules, user_config):
         """Validează întregul log pentru un concurs."""
-        contest_key = contest_rules.get("key") # Ar trebui adăugat în structură
+        contest_key = contest_rules.get("key")
         
         if contest_key == "maraton":
             required = contest_rules.get("required_stations", [])
@@ -230,12 +241,14 @@ class ScoringEngine:
             return True, f"Valid! {len(log_data)} QSO-uri", len(log_data)
         
         elif contest_key == "yo-dx":
-            # Validare simplă pentru YO-DX
             if len(log_data) == 0:
                 return False, "Niciun QSO", 0
             return True, f"Valid! {len(log_data)} QSO-uri", len(log_data)
-
-        else: # log_simplu
+        
+        elif contest_key == "log_simplu":
+            return True, f"Log: {len(log_data)} QSO-uri", len(log_data)
+        
+        else:
             return True, f"Log: {len(log_data)} QSO-uri", len(log_data)
 
 
@@ -251,8 +264,7 @@ class ContestManager:
 
     def update_rules(self, new_rules):
         self.rules = new_rules
-        # Salvează în fișier pentru persistență
-        DataManager.atomic_save("contests.json", self.rules)
+        DataManager.atomic_save(resource_path("contests.json"), self.rules)
 
 class RadioLogApp(Tk):
     def __init__(self):
@@ -270,12 +282,10 @@ class RadioLogApp(Tk):
         self.idx = None
         self.fs = int(self.cfg.get("fs", 11))
         
-        # Încarcă regulile concursurilor
         self.contest_manager = ContestManager(
             DataManager.load_data("contests.json", DEFAULT_CONTEST_RULES)
         )
         
-        # Theme configuration
         self.themes = {
             "dark": {"bg": "#1e1e1e", "fg": "white", "ac": "#007acc", "eb": "#333", "hd": "#2d2d2d"},
             "light": {"bg": "#ffffff", "fg": "black", "ac": "#0066cc", "eb": "#f0f0f0", "hd": "#e0e0e0"}
@@ -290,11 +300,9 @@ class RadioLogApp(Tk):
         self.protocol("WM_DELETE_WINDOW", self.on_exit)
     
     def ui(self):
-        # Header
         h = Frame(self, bg=self.th["hd"], pady=5)
         h.pack(fill="x")
         
-        # Language switcher
         self.lang_var = tk.StringVar(value=self.cfg.get("lang", "ro"))
         self.lang_menu = ttk.Combobox(h, textvariable=self.lang_var, values=["ro", "en"], state="readonly", width=5)
         self.lang_menu.bind("<<ComboboxSelected>>", self.change_lang)
@@ -302,21 +310,19 @@ class RadioLogApp(Tk):
         
         Label(h, text="YO Log PRO", font=("Consolas", self.fs+4, "bold"), fg="#4fc3f7", bg=self.th["hd"]).pack(side="left", padx=10)
         
-        # Contest selector
         self.contest_keys = self.contest_manager.get_all_contest_keys()
         self.cb = ttk.Combobox(h, values=self.contest_keys, state="readonly", width=15)
         self.cb.set(self.cfg.get("contest", "maraton"))
         self.cb.bind("<<ComboboxSelected>>", self.change_contest)
         self.cb.pack(side="left", padx=5)
         
-        # User info
+        self.inf = Label(h, text="", fg="#81c784", bg=self.th["hd"])
+        self.inf.pack(side="left", padx=20)
         self.update_info_bar()
         
-        # Theme toggle
         self.theme_btn = Button(h, text="☀/🌙", command=self.toggle_theme, bg=self.th["ac"], fg="white")
         self.theme_btn.pack(side="right", padx=5)
         
-        # Input Frame
         f = Frame(self, bg=self.th["bg"], pady=10)
         f.pack(fill="x")
         
@@ -350,27 +356,24 @@ class RadioLogApp(Tk):
             e.pack()
             self.en[k] = e
         
-        # Search button
         self.search_btn = Button(f, text=lang_manager.t("search"), command=self.search_online, 
                                 bg=self.th["ac"], fg="white")
         self.search_btn.grid(row=0, column=len(fields), padx=5)
         
-        # Log button
         self.bl = Button(f, text=lang_manager.t("log"), command=self.do_l, bg=self.th["ac"], fg="white")
         self.bl.grid(row=0, column=len(fields)+1, padx=10)
         
-        # Dynamic controls for the current contest
         self.dynamic_controls_frame = Frame(f, bg=self.th["bg"])
         self.dynamic_controls_frame.grid(row=1, column=0, columnspan=8, pady=10)
         self.update_dynamic_controls()
         
-        # Treeview
         t_f = Frame(self)
         t_f.pack(fill="both", expand=True, padx=10, pady=5)
         
-        self.tr = ttk.Treeview(t_f, columns=(1,2,3,4,5,6), show="headings")
         cols = [lang_manager.t("call"), lang_manager.t("band"), lang_manager.t("mode"), 
                 lang_manager.t("rst_s"), lang_manager.t("rst_r"), lang_manager.t("note")]
+        
+        self.tr = ttk.Treeview(t_f, columns=(1,2,3,4,5,6), show="headings")
         for i, n in enumerate(cols, 1):
             self.tr.heading(i, text=n)
             self.tr.column(i, width=100)
@@ -383,7 +386,6 @@ class RadioLogApp(Tk):
         
         self.tr.bind("<Double-1>", self.ed)
         
-        # Bottom buttons
         bt = Frame(self, bg=self.th["hd"])
         bt.pack(fill="x")
         
@@ -402,16 +404,9 @@ class RadioLogApp(Tk):
             cat_code = self.cfg.get("cat", "A")
             cat_name = contest_rules["categories"].get(cat_code, cat_code)
             info_text += f" | {cat_name}"
-        
-        if self.inf:
-            self.inf.config(text=info_text)
-        else: # First time UI creation
-            self.inf = Label(h, text=info_text, fg="#81c784", bg=self.th["hd"])
-            self.inf.pack(side="left", padx=20)
-
+        self.inf.config(text=info_text)
 
     def update_dynamic_controls(self):
-        # Clear previous dynamic controls
         for widget in self.dynamic_controls_frame.winfo_children():
             widget.destroy()
 
@@ -421,7 +416,6 @@ class RadioLogApp(Tk):
         if not rules:
             return
 
-        # Maraton specific controls
         if contest_key == "maraton" and "categories" in rules:
             f = Frame(self.dynamic_controls_frame, bg=self.th["bg"])
             f.pack(fill="x", pady=5)
@@ -452,7 +446,6 @@ class RadioLogApp(Tk):
         lang_manager.set_lang(lang)
         self.cfg['lang'] = lang
         DataManager.atomic_save("config.json", self.cfg)
-        # Reconstruim UI-ul pentru a aplica noile traduceri
         for widget in self.winfo_children():
             widget.destroy()
         self.ui()
@@ -462,12 +455,10 @@ class RadioLogApp(Tk):
         contest_key = self.cb.get()
         self.cfg["contest"] = contest_key
         DataManager.atomic_save("config.json", self.cfg)
-        
-        # Update UI for the new contest
-        self.update_dynamic_controls()
-        self.update_info_bar()
-        self.ref() # Refresh log display with new scoring
-        messagebox.showinfo("Info", f"Concurs schimbat la: {self.contest_manager.get_rules(contest_key)['name']}")
+        for widget in self.winfo_children():
+            widget.destroy()
+        self.ui()
+        self.ref()
 
     def do_l(self):
         c = self.en["c"].get().upper().strip()
@@ -559,7 +550,6 @@ class RadioLogApp(Tk):
         self.update()
         
         def search():
-            # Simulare căutare
             results = {
                 "name": callsign,
                 "qth": "Iasi" if "YO" in callsign else "Unknown",
@@ -599,7 +589,6 @@ class RadioLogApp(Tk):
             messagebox.showerror("Eroare", "Reguli de concurs negăsite.")
             return
 
-        # Add the key to the rules for validation
         contest_rules['key'] = contest_key
         
         valid, msg, score = ScoringEngine.validate_log(self.log, contest_rules, self.cfg)
@@ -762,7 +751,6 @@ class RadioLogApp(Tk):
         self.current_theme = self.cfg.get("theme", "dark")
         self.th = self.themes[self.current_theme]
         
-        # Reconstruim UI-ul pentru a aplica noile setări
         for widget in self.winfo_children():
             widget.destroy()
         
@@ -821,7 +809,6 @@ class ContestEditor:
         self.notebook = ttk.Notebook(self.window)
         self.notebook.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Editor pentru fiecare concurs
         for contest_key in self.rules.keys():
             frame = Frame(self.notebook, bg=parent.th["bg"])
             self.notebook.add(frame, text=contest_key.upper())
@@ -833,13 +820,11 @@ class ContestEditor:
     def create_contest_editor(self, parent, contest_key):
         rules = self.rules[contest_key]
         
-        # Nume
         Label(parent, text="Nume Concurs:", bg=parent.th["bg"], fg=parent.th["fg"]).pack(pady=5)
         e_name = Entry(parent, bg=parent.th["eb"], fg=parent.th["fg"])
         e_name.insert(0, rules.get("name", ""))
         e_name.pack()
         
-        # Categorii
         if "categories" in rules:
             Label(parent, text="Categorii (unul per linie, cod:descriere):", bg=parent.th["bg"], fg=parent.th["fg"]).pack(pady=5)
             self.cat_text = Text(parent, height=5, bg=parent.th["eb"], fg=parent.th["fg"])
@@ -847,7 +832,6 @@ class ContestEditor:
             self.cat_text.insert("1.0", cat_str)
             self.cat_text.pack(fill="x", expand=True)
 
-        # Reguli speciale Maraton
         if contest_key == "maraton":
             Label(parent, text="Stații Obligatorii (virgulă):", bg=parent.th["bg"], fg=parent.th["fg"]).pack(pady=5)
             e_req = Entry(parent, bg=parent.th["eb"], fg=parent.th["fg"])
@@ -864,22 +848,17 @@ class ContestEditor:
             e_county.insert(0, ", ".join(rules.get("counties_for_ic_score", [])))
             e_county.pack()
 
-            # Store for later access
             self.e_req = e_req
             self.e_min = e_min
             self.e_county = e_county
     
     def save_and_close(self):
-        for contest_key in self.rules.keys():
-            frame = self.notebook.nametowidget(self.notebook.tabs()[list(self.rules.keys()).index(contest_key)])
-            
-            # This is a simplified save. A full implementation would read all fields.
-            # For now, we just show a message.
-            pass
-        
+        # Aici ar trebui implementată logica de salvare a modificărilor din UI în dicționarul de reguli.
+        # Pentru simplitate, afișăm un mesaj.
         self.window.destroy()
         messagebox.showinfo("Info", "Funcționalitatea de editare avansată este în dezvoltare. "
-                                      "Pentru a modifica regulile, editați direct fișierul 'contests.json'.")
+                                      "Pentru a modifica regulile, editați direct fișierul 'contests.json' "
+                                      "sau folosiți o aplicație de editare JSON.")
 
 
 if __name__ == "__main__":
