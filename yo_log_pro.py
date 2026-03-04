@@ -29,7 +29,8 @@ LANG = {
         "call": "Indicativ", "band": "Bandă", "mode": "Mod", "rst_s": "RST S", "rst_r": "RST R", "note": "Notă/Locator",
         "log": "LOG", "update": "ACTUALIZEAZĂ", "search": "🔍 Caută",
         "settings": "Setări", "stats": "Statistici", "validate": "Validează", "export": "Export",
-        "delete": "Șterge", "backup": "Backup", "online": "Online",
+        "delete": "Șterge", "backup": "Backup", "online": "Online", "offline": "Offline (Auto)",
+        "manual_mode": "Mod Manual (Setare Dată/Oră)",
         "theme": "Temă", "font_size": "Mărime Font", "contest": "Concurs", "category": "Categorie",
         "county": "Județ", "operator": "Tip Operator",
         "required_stations": "Stații Obligatorii", "special_calls": "Indicative Speciale",
@@ -67,14 +68,18 @@ LANG = {
         "credits_dev": "Dezvoltat de:\nArdei Constantin-Cătălin (YO8ACR)\n\nEmail: yo8acr@gmail.com",
         "usage_title": "Instrucțiuni de Utilizare",
         "usage_text": "1. Introduceți Indicativul, Banda și Modul.\n2. Apăsați LOG sau tasta ENTER pentru a adăuga.\n3. Folosiți Click Dreapta pe un QSO pentru a-l edita sau șterge.\n4. Validați log-ul înainte de export.\n5. Faceți Backup periodic!",
-        "app_size": "Dimensiune Aplicație:"
+        "app_size": "Dimensiune Aplicație:",
+        "date_label": "Dată (YYYY-MM-DD):",
+        "time_label": "Oră (HH:MM:SS):",
+        "enable_manual_datetime": "Activează setarea manuală a Datei/Orei"
     },
     "en": {
         "app_title": "YO Log PRO v12.0 - Multi-Contest",
         "call": "Call", "band": "Band", "mode": "Mode", "rst_s": "RST S", "rst_r": "RST R", "note": "Note/Locator",
         "log": "LOG", "update": "UPDATE", "search": "🔍 Search",
         "settings": "Settings", "stats": "Stats", "validate": "Validate", "export": "Export",
-        "delete": "Delete", "backup": "Backup", "online": "Online",
+        "delete": "Delete", "backup": "Backup", "online": "Online", "offline": "Offline (Auto)",
+        "manual_mode": "Manual Mode (Set Date/Time)",
         "theme": "Theme", "font_size": "Font Size", "contest": "Contest", "category": "Category",
         "county": "County", "operator": "Operator Type",
         "required_stations": "Required Stations", "special_calls": "Special Callsigns",
@@ -112,7 +117,10 @@ LANG = {
         "credits_dev": "Developed by:\nArdei Constantin-Cătălin (YO8ACR)\n\nEmail: yo8acr@gmail.com",
         "usage_title": "Usage Instructions",
         "usage_text": "1. Enter Call, Band and Mode.\n2. Press LOG or ENTER key to add.\n3. Use Right Click on a QSO to edit or delete.\n4. Validate the log before exporting.\n5. Make Backups regularly!",
-        "app_size": "App Size:"
+        "app_size": "App Size:",
+        "date_label": "Date (YYYY-MM-DD):",
+        "time_label": "Time (HH:MM:SS):",
+        "enable_manual_datetime": "Enable manual Date/Time setting"
     }
 }
 
@@ -123,12 +131,8 @@ DEFAULT_CONTEST_RULES = {
     "maraton": {
         "name": "Maraton Ion Creangă",
         "categories": {
-            "A": "A. Seniori YO (>18 ani)",
-            "B": "B. YL",
-            "C": "C. Juniori YO (<=18 ani)",
-            "D": "D. Club",
-            "E": "E. DX",
-            "F": "F. Receptori"
+            "A": "A. Seniori YO (>18 ani)", "B": "B. YL", "C": "C. Juniori YO (<=18 ani)",
+            "D": "D. Club", "E": "E. DX", "F": "F. Receptori"
         },
         "required_stations": ["YP8IC", "YR8TGN"],
         "special_scoring": {"YP8IC": 20, "YR8TGN": 20, "IC_CLUB": 10, "IC_INDIVIDUAL": 5},
@@ -245,9 +249,7 @@ class RadioLogApp(tk.Tk):
     def __init__(self):
         super().__init__()
         
-        # --- CENTRARE FEREASTRĂ ---
         self.center_window(1024, 600)
-        
         self.title(lang_manager.t("app_title"))
         self.geometry("1024x600")
         self.minsize(900, 550)
@@ -255,7 +257,7 @@ class RadioLogApp(tk.Tk):
         self.cfg = DataManager.load_data("config.json", {
             "call": "YO8ACR", "loc": "KN37", "jud": "NT", 
             "cat": "A", "fs": 11, "contest": "maraton", "theme": "dark",
-            "county": "NT", "lang": "ro"
+            "county": "NT", "lang": "ro", "manual_datetime": False
         })
         
         self.log = DataManager.load_data("log.json", [])
@@ -277,19 +279,12 @@ class RadioLogApp(tk.Tk):
         self.configure(bg=self.th["bg"])
         self.fnt = ("Consolas", self.fs)
         
-        # --- CREARE MENIU PRINCIPAL ---
         self.create_menu()
-        
         self.ui()
         self.ref()
         
-        # CORECTARE IEȘIRE
         self.protocol("WM_DELETE_WINDOW", self.on_exit)
-        
-        # BIND TASTA ENTER
         self.bind('<Return>', self.on_enter_key)
-        
-        # CREARE MENIU CLICK DREAPTA
         self.create_context_menu()
 
     def center_window(self, width, height):
@@ -302,8 +297,6 @@ class RadioLogApp(tk.Tk):
     def create_menu(self):
         menubar = tk.Menu(self)
         self.config(menu=menubar)
-        
-        # Meniu Ajutor
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label=lang_manager.t("help"), menu=help_menu)
         help_menu.add_command(label=lang_manager.t("about"), command=self.show_about)
@@ -311,18 +304,15 @@ class RadioLogApp(tk.Tk):
         help_menu.add_command(label="Exit", command=self.on_exit)
 
     def show_about(self):
-        # Fereastră customizată cu tab-uri
         about_win = tk.Toplevel(self)
         about_win.title(lang_manager.t("about"))
         about_win.geometry("500x350")
         about_win.resizable(False, False)
         about_win.configure(bg=self.th["bg"])
         
-        # Notebook pentru tab-uri
         nb = ttk.Notebook(about_win)
         nb.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Tab 1: Credite
         frame_credits = tk.Frame(nb, bg=self.th["bg"])
         nb.add(frame_credits, text="Credits")
         
@@ -330,32 +320,19 @@ class RadioLogApp(tk.Tk):
                            bg=self.th["bg"], fg=self.th["fg"], justify="left", font=("Consolas", 10))
         lbl_dev.pack(pady=20, padx=20)
         
-        # Calcul dimensiune aplicație
         try:
-            # În PyInstaller, sys.executable pointează către exe-ul temporar sau real
-            exe_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
-            # Încercăm să găsim exe-ul real
-            if hasattr(sys, 'frozen'):
-                exe_file = sys.executable
-            else:
-                exe_file = __file__
-            
+            exe_file = getattr(sys, 'frozen', False) and sys.executable or __file__
             if os.path.exists(exe_file):
                 size_bytes = os.path.getsize(exe_file)
                 size_kb = size_bytes / 1024
-                if size_kb < 1024:
-                    size_str = f"{size_kb:.2f} KB"
-                else:
-                    size_str = f"{size_kb/1024:.2f} MB"
+                size_str = f"{size_kb:.2f} KB" if size_kb < 1024 else f"{size_kb/1024:.2f} MB"
                 
-                # LINIA CORECTATĂ AICI:
                 lbl_size = tk.Label(frame_credits, text=f"{lang_manager.t('app_size')} {size_str}", 
                                    bg=self.th["bg"], fg=self.th["ac"], font=("Consolas", 9))
                 lbl_size.pack(pady=5)
         except Exception as e:
             print(f"Nu s-a putut calcula dimensiunea: {e}")
 
-        # Tab 2: Utilizare
         frame_usage = tk.Frame(nb, bg=self.th["bg"])
         nb.add(frame_usage, text="Utilizare")
         
@@ -367,7 +344,6 @@ class RadioLogApp(tk.Tk):
                                  bg=self.th["bg"], fg=self.th["fg"], justify="left", font=("Consolas", 10))
         lbl_usage_text.pack(pady=10, padx=20)
         
-        # Buton închidere
         btn_close = tk.Button(about_win, text="Închide", command=about_win.destroy, 
                              bg=self.th["ac"], fg="white", width=15)
         btn_close.pack(pady=10)
@@ -452,16 +428,44 @@ class RadioLogApp(tk.Tk):
             e.pack()
             self.en[k] = e
         
+        # --- NEW: Manual Date/Time Controls ---
+        self.manual_datetime_var = tk.BooleanVar(value=self.cfg.get("manual_datetime", False))
+        
+        frame_dt = tk.Frame(f, bg=self.th["bg"])
+        frame_dt.grid(row=0, column=len(fields), padx=10)
+        
+        tk.Label(frame_dt, text=lang_manager.t("enable_manual_datetime"), fg="#bbb", bg=self.th["bg"]).pack()
+        
+        chk_manual = tk.Checkbutton(frame_dt, text="Manual", variable=self.manual_datetime_var, 
+                                   command=self.toggle_datetime_editable, bg=self.th["bg"], fg=self.th["fg"])
+        chk_manual.pack()
+        
+        self.dt_frame_inputs = tk.Frame(f, bg=self.th["bg"])
+        self.dt_frame_inputs.grid(row=1, column=0, columnspan=10, pady=5)
+        
+        # Date Input
+        tk.Label(self.dt_frame_inputs, text=lang_manager.t("date_label"), fg="#bbb", bg=self.th["bg"]).grid(row=0, column=0, padx=5)
+        self.en["d_manual"] = tk.Entry(self.dt_frame_inputs, width=12, bg=self.th["eb"], fg=self.th["fg"], font=self.fnt, state="disabled")
+        self.en["d_manual"].grid(row=0, column=1, padx=5)
+        self.en["d_manual"].insert(0, datetime.datetime.now().strftime("%Y-%m-%d"))
+        
+        # Time Input
+        tk.Label(self.dt_frame_inputs, text=lang_manager.t("time_label"), fg="#bbb", bg=self.th["bg"]).grid(row=0, column=2, padx=5)
+        self.en["t_manual"] = tk.Entry(self.dt_frame_inputs, width=12, bg=self.th["eb"], fg=self.th["fg"], font=self.fnt, state="disabled")
+        self.en["t_manual"].grid(row=0, column=3, padx=5)
+        self.en["t_manual"].insert(0, datetime.datetime.now().strftime("%H:%M:%S"))
+        
+        # Search Button
         self.search_btn = tk.Button(f, text=lang_manager.t("search"), command=self.search_online, 
                                 bg=self.th["ac"], fg="white", width=10)
-        self.search_btn.grid(row=0, column=len(fields), padx=5)
+        self.search_btn.grid(row=0, column=len(fields)+1, padx=5)
         
         self.bl = tk.Button(f, text=lang_manager.t("log"), command=self.do_l, bg=self.th["ac"], fg="white", width=10, font=("Consolas", self.fs, "bold"))
-        self.bl.grid(row=0, column=len(fields)+1, padx=10)
+        self.bl.grid(row=0, column=len(fields)+2, padx=10)
         
         # Dynamic Controls
         self.dynamic_controls_frame = tk.Frame(f, bg=self.th["bg"])
-        self.dynamic_controls_frame.grid(row=1, column=0, columnspan=10, pady=5)
+        self.dynamic_controls_frame.grid(row=2, column=0, columnspan=10, pady=5)
         self.update_dynamic_controls()
         
         # Treeview Frame
@@ -487,12 +491,13 @@ class RadioLogApp(tk.Tk):
         self.tr.bind("<Button-3>", self.show_context_menu)
         self.tr.bind("<Double-1>", self.ed)
         
-        # Bottom Buttons
+        # Bottom Buttons - FIXED
         bt = tk.Frame(self, bg=self.th["hd"])
         bt.pack(fill="x", pady=5)
         
         btn_style = {"bg": self.th["btn"], "fg": self.th["fg"], "relief": "flat", "padx": 10}
         
+        # Buttons folosesc același stil de bază
         tk.Button(bt, text=lang_manager.t("settings"), command=self.set, **btn_style).pack(side="left", padx=5)
         tk.Button(bt, text=lang_manager.t("stats"), command=self.st, **btn_style).pack(side="left")
         tk.Button(bt, text=lang_manager.t("validate"), command=self.validate, **btn_style).pack(side="left", padx=5)
@@ -501,9 +506,27 @@ class RadioLogApp(tk.Tk):
         
         fr_btns = tk.Frame(bt, bg=self.th["hd"])
         fr_btns.pack(side="right", padx=5)
+        
+        # Butonul de Backup folosește stilul standard
         tk.Button(fr_btns, text=lang_manager.t("backup"), command=self.manual_backup, **btn_style).pack(side="right", padx=5)
-        tk.Button(fr_btns, text=lang_manager.t("delete"), command=self.dl, bg="#c0392b", fg="white", **btn_style).pack(side="right", padx=5)
-    
+        
+        # Butonul de Ștergere are stil propriu (Roșu) - FIXAT
+        # Nu mai folosim **btn_style aici pentru a evita conflictul de 'bg'
+        delete_btn_style = {"bg": "#c0392b", "fg": "white", "relief": "flat", "padx": 10}
+        tk.Button(fr_btns, text=lang_manager.t("delete"), command=self.dl, **delete_btn_style).pack(side="right", padx=5)
+
+    def toggle_datetime_editable(self):
+        state = "normal" if self.manual_datetime_var.get() else "disabled"
+        self.en["d_manual"].config(state=state)
+        self.en["t_manual"].config(state=state)
+        if state == "disabled":
+            # Reset to current time if switching back to auto
+            now = datetime.datetime.now()
+            self.en["d_manual"].delete(0, "end")
+            self.en["d_manual"].insert(0, now.strftime("%Y-%m-%d"))
+            self.en["t_manual"].delete(0, "end")
+            self.en["t_manual"].insert(0, now.strftime("%H:%M:%S"))
+
     def update_info_bar(self):
         contest_rules = self.contest_manager.get_rules(self.cfg.get("contest"))
         info_text = f"{self.cfg['call']} | {self.cfg['loc']} | {self.cfg['jud']}"
@@ -575,10 +598,25 @@ class RadioLogApp(tk.Tk):
         c = self.en["c"].get().upper().strip()
         if not c: return
         
-        n = datetime.datetime.utcnow()
+        # Determinăm Data și Ora
+        if self.manual_datetime_var.get():
+            d = self.en["d_manual"].get()
+            t = self.en["t_manual"].get()
+            # Validare simplă (opțional)
+            try:
+                datetime.datetime.strptime(d, "%Y-%m-%d")
+                datetime.datetime.strptime(t, "%H:%M:%S")
+            except ValueError:
+                messagebox.showerror("Eroare", "Format dată/oră invalid. Folosiți YYYY-MM-DD și HH:MM:SS")
+                return
+        else:
+            n = datetime.datetime.utcnow()
+            d = n.strftime("%Y-%m-%d")
+            t = n.strftime("%H:%M:%S")
+        
         q = {
-            "d": n.strftime("%Y-%m-%d"),
-            "t": n.strftime("%H:%M:%S"),
+            "d": d,
+            "t": t,
             "c": c,
             "b": self.en["b"].get(),
             "m": self.en["m"].get(),
@@ -635,6 +673,12 @@ class RadioLogApp(tk.Tk):
                 self.en[k].delete(0, "end")
                 self.en[k].insert(0, v)
         
+        # Setăm și datele manuale dacă e cazul (pentru editare)
+        self.en["d_manual"].delete(0, "end")
+        self.en["d_manual"].insert(0, q["d"])
+        self.en["t_manual"].delete(0, "end")
+        self.en["t_manual"].insert(0, q["t"])
+        
         self.bl.config(text=lang_manager.t("update"), bg="#f57c00")
     
     def dl(self):
@@ -659,6 +703,7 @@ class RadioLogApp(tk.Tk):
         self.update()
         
         def search():
+            # Simulare căutare online (în realitate ai face un API call)
             results = {
                 "name": callsign,
                 "qth": "Iasi" if "YO" in callsign else "Unknown",
@@ -836,6 +881,12 @@ class RadioLogApp(tk.Tk):
         lang.set(self.cfg.get("lang", "ro"))
         lang.pack()
         
+        # NEW: Manual Datetime Checkbox in Settings
+        tk.Label(d, text=lang_manager.t("enable_manual_datetime"), font=("Consolas", 10, "bold")).pack(pady=5)
+        chk_manual_settings = tk.Checkbutton(d, text="Activează setare manuală", 
+                                           variable=self.manual_datetime_var, bg=self.th["bg"], fg=self.th["fg"])
+        chk_manual_settings.pack()
+        
         def sv():
             self.cfg.update({
                 "call": e1.get().upper(),
@@ -844,7 +895,8 @@ class RadioLogApp(tk.Tk):
                 "fs": int(e4.get()),
                 "theme": theme.get(),
                 "contest": contest_combo.get(),
-                "lang": lang.get()
+                "lang": lang.get(),
+                "manual_datetime": self.manual_datetime_var.get()
             })
             self.lang_var.set(lang.get())
             lang_manager.set_lang(lang.get())
@@ -971,4 +1023,3 @@ class ContestEditor:
 if __name__ == "__main__":
     app = RadioLogApp()
     app.mainloop()
- 
