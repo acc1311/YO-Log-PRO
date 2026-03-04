@@ -351,7 +351,7 @@ yo-log-pro/
   "call": "YO8ACR",
   "loc": "KN37",
   "jud": "NT",
-  "addr": "Piatra Neamț",
+  "addr": "Târgu Neamț",
   "cat": 0,
   "fs": 12,
   "contest": "maraton",
