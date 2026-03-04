@@ -172,7 +172,7 @@ DEFAULT_CONTEST_RULES = {
         "name": {"ro": "Maraton Ion Creangă", "en": "Marathon Ion Creangă"},
         "categories": {"A": {"ro": "A. Seniori YO (>18 ani)", "en": "A. Senior YO (>18)"}, "B": {"ro": "B. YL", "en": "B. YL"}, "C": {"ro": "C. Juniori YO (<=18 ani)", "en": "C. Junior YO (<=18)"}, "D": {"ro": "D. Club", "en": "D. Club"}, "E": {"ro": "E. DX", "en": "E. DX"}, "F": {"ro": "F. Receptori", "en": "F. SWL"}},
         "required_stations": ["YP8IC", "YR8TGN"],
-        "special_scoring": {"YP8IC": 20, "YR8TGN": 20},
+        "special_scoring": {"YP8IC": 20, "YR8TGN": 20, "YP8KZG": 5, "YO8RRC": 5, "YO8K": 5, "YO8ACR": 5},
         "counties_for_ic_score": ["NT", "IS"],
         "min_qso_for_diploma": 100,
         "scoring_mode": "maraton_special"
@@ -241,7 +241,7 @@ class ScoringEngine:
             user_county = user_config.get("county", "NT")
             if "/IC" in call:
                 if user_county in contest_rules.get("counties_for_ic_score", []):
-                    club_prefixes = ["YO8KZG", "YO8RRC", "YO8K", "YO8ACR"] # Example prefixes
+                    club_prefixes = ["YO8KZG", "YO8RRC", "YO8K", "YO8ACR"]
                     is_club = any(call.startswith(p) for p in club_prefixes)
                     return 10 if is_club else 5
             return 1
@@ -1050,48 +1050,32 @@ class RadioLogApp(tk.Tk):
         messagebox.showinfo("Stats", m)
     
     def manual_backup(self):
-        if DataManager.create saving
-        
-        for contest_key in sorted(self.rules.keys()):
-            frame = tk.Frame(self.notebook, bg=parent.th["bg"])
-            self.notebook.add(frame, text=contest_key.upper())
-            
-            # Load a deep copy for editing
-            import copy
-            self.edited_rules[contest_key] = copy.deepcopy(self.rules[contest_key])
-            
-            self.create_contest_editor(frame, contest_key, self.edited_rules[contest_key])
-        
-        btn_frame = tk.Frame(self.window, bg=parent.th["bg"])
-        btn_frame.pack(fill="x", pady=10)
-        
-        tk.Button(btn_frame, text=lang_manager.t("save_rules"), 
-               command=self.save_and_close, bg=parent.th["ac"], fg="white", font=parent.fnt_main).pack(side="right", padx=10)
-        
-        tk.Button(btn_frame, text=lang_manager.t("cancel"), 
-               command=self.window.destroy, bg=parent.th["btn"], fg=parent.th["btn_fg"], font=parent.fnt_main).pack(side="right")
+        if DataManager.create_backup(self.log):
+            messagebox.showinfo(lang_manager.t("backup_success"), lang_manager.t("backup_success_text"))
+        else:
+            messagebox.showerror(lang_manager.t("backup_error"), lang_manager.t("backup_error_text"))
 
-    def create_contest_editor(self, parent, contest_key, rules):
-        # Make it scrollable
-        canvas = tk.Canvas(parent, bg=parent.cget("bg"))
-        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
+    def on_exit(self, force_quit=False):
+        if messagebox.askyesno(lang_manager.t("exit_confirm"), lang_manager.t("exit_confirm")):
+            DataManager.atomic_save("log.json", self.log)
+            DataManager.create_backup(self.log)
+            DataManager.atomic_save("config.json", self.cfg)
+            if force_quit:
+                self.destroy()
+                os._exit(0)
+            else:
+                self.destroy()
 
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
+class ContestEditor:
+    def __init__(self, parent, rules_dict):
+        self.rules = rules_dict
+        self.window = tk.Toplevel(parent)
+        self.window.title(lang_manager.t("edit_contests"))
+        self.window.geometry("800x600")
+        self.window.grab_set()
         
-        # --- Common Fields ---
-        tk.Label(scrollable_frame, text=lang_manager.t("contest_name"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w=parent.cget("fg"), font=parent.cget("font"), width=40)
-        e_name_ro.insert(0, rules.get("name", {}).get("ro", ""))
-        e_name_ro.pack(side="left", fill="x", expand=True, padx=5)
-        
-        tk.Label(name_frame, text="EN:", bg=parent.cget("bg"), fg=parent.cget("fg")).pack(side="left")
-        e_name_en = tk.Entry(name_frame, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"), width=40)
-        e_name_en.insert(0, rules.get("name", {}).get("en", ""))
+        self.notebook = ttk.Notebook(self.window)
+        self.notebook.pack(fill="both", expand=True, padx=10insert(0, rules.get("name", {}).get("en", ""))
         e_name_en.pack(side="left", fill="x", expand=True, padx=5)
 
         def update_name_dict():
@@ -1110,7 +1094,31 @@ class RadioLogApp(tk.Tk):
         
         def update_categories():
             new_categories = {}
-            for line in self.cat_text.get("1.0", "end-1c")).pack(pady=5, anchor="w")
+            for line in self.cat_text.get("1.0", "end-1c").strip().split("\n"):
+                if ":" in line:
+                    key, val = line.split(":", 1)
+                    new_categories[key] = {"ro": val.split("|")[0], "en": val.split("|")[1]}
+            rules["categories"] = new_categories
+        
+        self.cat_text.bind("<KeyRelease>", lambda e: update_categories())
+        
+        # --- Rules specific to Maraton ---
+        if contest_key == "maraton":
+            tk.Label(scrollable_frame, text=lang_manager.t("required_stations_maraton"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
+            e_req = tk.Entry(scrollable_frame, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
+            e_req.insert(0, ", ".join(rules., "bold")).pack(pady=5, anchor="w")
+            e_min = tk.Entry(scrollable_frame, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
+            e_min.insert(0, str(rules.get("min_qso_for_diploma", 100)))
+            e_min.pack(fill="x", pady=2)
+            e_min.bind("<KeyRelease>", lambda e: rules.update({"min_qso_for_diploma": int(e_min.get())}))
+            
+            tk.Label(scrollable_frame, text=lang_manager.t("counties_for_ic_score"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
+            e_county = tk.Entry(scrollable_frame, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
+            e_county.insert(0, ", ".join(rules.get("counties_for_ic_score", [])))
+            e_county.pack(fill="x", pady=2)
+            e_county.bind("<KeyRelease>", lambda e: rules.update({"counties_for_ic_score": [s.strip() for s in e_county.get().split(",")]}))
+            
+            tk.Label(scrollable_frame, text=lang_manager.t("special_scoring_maraton"), bg=parent.cget("bg"), fg=parent.cget("fg"), font=("Consolas", 10, "bold")).pack(pady=5, anchor="w")
             self.special_scoring_text = tk.Text(scrollable_frame, height=5, bg=parent.cget("eb"), fg=parent.cget("fg"), font=parent.cget("font"))
             special_str = "\n".join([f"{k}:{v}" for k, v in rules.get("special_scoring", {}).items()])
             self.special_scoring_text.insert("1.0", special_str)
