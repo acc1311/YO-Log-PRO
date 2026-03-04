@@ -21,7 +21,7 @@
 ### Funcționalități principale
 
 - **Înregistrare QSO rapidă** — Introduci indicativul, banda, modul și apeși ENTER sau butonul LOG
-- **Multi-concurs** — Suport pentru Maraton Ion Creangă, Cupa Moldovei, Ștafetă, YO-DX-HF și Log Simplu
+- **Multi-concurs** — Suport pentru Maraton Ion Creangă, Cupa Moldovei, Cupa Tomis, Ștafetă, YO-DX-HF și Log Simplu
 - **Calcul punctaj automat** — Reguli specifice per concurs, inclusiv stații cu punctaj special pentru Maraton
 - **Validare log** — Verifică stațiile obligatorii, numărul minim de QSO-uri și eligibilitatea pentru diplomă
 - **Export multiple formate** — Cabrillo (`.log`), ADIF (`.adi`), CSV (`.csv`)
@@ -36,7 +36,7 @@
 | Cheie         | Nume                         | Mod scoring       |
 |---------------|------------------------------|--------------------|
 | `maraton`     | Maraton Ion Creangă          | Maraton (special) |
-| `stafeta`     | Cupa Tomisului               | Standard          |
+| `stafeta`     | Cupa Tomis                   | Standard          |
 | `yo-dx`       | YO-DX-HF                     | Standard          |
 | `log_simplu`  | Log Simplu                   | Fără              |
 
@@ -117,7 +117,7 @@ Toate fișierele sunt salvate în **același director** cu executabilul sau scri
 ### Key Features
 
 - **Fast QSO logging** — Enter callsign, band, mode and press ENTER or click LOG
-- **Multi-contest support** — Maraton Ion Creangă, Moldova Cup (Relay), YO-DX-HF, and Simple Log
+- **Multi-contest support** — Maraton Ion Creangă, Moldova Cup, Tomis Cup, Relay, YO-DX-HF, and Simple Log
 - **Automatic scoring** — Contest-specific rules with special station multipliers for Maraton
 - **Log validation** — Checks for required stations, minimum QSO count, and diploma eligibility
 - **Multiple export formats** — Cabrillo (`.log`), ADIF (`.adi`), CSV (`.csv`)
@@ -132,7 +132,7 @@ Toate fișierele sunt salvate în **același director** cu executabilul sau scri
 | Key           | Name                         | Scoring mode      |
 |---------------|------------------------------|-------------------|
 | `maraton`     | Marathon Ion Creangă         | Maraton (special) |
-| `stafeta`     | Tomis Cup (Relay)            | Standard          |
+| `stafeta`     | Tomis Cup                    | Standard          |
 | `yo-dx`       | YO-DX-HF                     | Standard          |
 | `log_simplu`  | Simple Log                   | None              |
 
