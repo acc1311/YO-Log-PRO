@@ -4,7 +4,36 @@
 YO Log PRO v16.1 FINAL — Professional Multi-Contest Amateur Radio Logger
 Developed by: Ardei Constantin-Cătălin (YO8ACR)
 Email: yo8acr@gmail.com
+"""
+YO Log PRO v16.1 FINAL — Înregistrator radio amator multi-concurs profesional
+Dezvoltat de: Ardei Constantin-Cătălin (YO8ACR)
+Email: yo8acr@gmail.com
 
+REZOLVĂRI v16.2:
+- REZOLVAT: obiectul 'dict' nu are atributul 'insert' — DM.load() a returnat {} în loc de []
+- REZOLVAT: Toate dialogurile popup sunt acum centrate pe fereastra părinte
+- EditorConcurs: câmpuri pentru categorii, benzi, moduri, stații_rechizite, scor_special, puncte_bandă, listă_comitat complet editabile
+- ManagerConcurs: butoane Duplicat + Export + Import adăugate
+- Fereastra Statistici: statistici complete detaliate (benzi, moduri, DXCC, toate lucrate, timp de funcționare, rată)
+- Export Cabrillo: antet 3.0 complet cu CONCURS, CATEGORIE-*, NUME, ADRESĂ, SOAPBOX
+- Export ADIF: FRECVENTĂ în MHz, GRIDSQUARE, MY_GRIDSQUARE, STX, SRX
+- Export EDI: adăugat
+- Export text tipărit: adăugat
+- Validare: mesaje îmbunătățite, verifică benzile/modurile interzise
+- Etichetă scor: arată formatul Σ QSO×MULT=TOTAL
+- Indicator lucrat înainte: arată altă bandă/mod lucrat în galben
+- Dialog căutare: Ctrl+F, filtru live
+- Dialog cronometru: numărătoare inversă concurs
+- Verificare hash: verificare MD5
+- Sunet: bip la multiplicator nou, duplicat
+- Setări: adr, dimensiune font, casetă de selectare sunete
+- Configurare: buton de salvare categorie/județ remediat
+- Contor de rată: QSO/h live
+- Salvare/restaurare geometrie
+- Bara de derulare în ContestEditor (formă înaltă)
+- Auto-RST la schimbarea benzii remediată
+- Ștergere jurnal cu backup
+"""
 FIXES v16.2:
 - FIXED: 'dict' object has no attribute 'insert' — DM.load() returned {} instead of []
 - FIXED: All popup dialogs now center on parent window
