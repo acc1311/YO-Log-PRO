@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-YO Log PRO v16.1 FINAL — Professional Multi-Contest Amateur Radio Logger
+YO Log PRO v16.3 FINAL — Professional Multi-Contest Amateur Radio Logger
 Developed by: Ardei Constantin-Cătălin (YO8ACR)
 Email: yo8acr@gmail.com
+
+FIXES v16.3:
+- ADDED: Cabrillo 2.0 export (compatible with LOGIX and similar programs)
+- ADDED: Email field in settings
+- ADDED: Mode mapping PH/CW/RY/DG for Cabrillo 2.0
+- ADDED: CATEGORY as single number, CLAIMED-SCORE, CREATED BY (no hyphen)
+- ADDED: Date format YYYY-MM-DD in Cabrillo 2.0 QSO lines
+- ADDED: Exchange sent/received with county/serial/"--" fallback
 
 FIXES v16.2:
 - FIXED: 'dict' object has no attribute 'insert' — DM.load() returned {} instead of []
@@ -278,11 +286,19 @@ YO_COUNTIES = ["AB", "AR", "AG", "BC", "BH", "BN", "BT", "BV", "BR", "BZ",
                "HR", "HD", "IL", "IS", "IF", "MM", "MH", "MS", "NT", "OT",
                "PH", "SM", "SJ", "SB", "SV", "TR", "TM", "TL", "VS", "VL", "VN", "B"]
 
+# ─── Cabrillo 2.0 Mode Mapping ───────────────────────────────────────────────
+CAB2_MODE_MAP = {
+    "SSB": "PH", "AM": "PH", "FM": "PH", "SSTV": "PH",
+    "CW": "CW",
+    "RTTY": "RY", "PSK31": "RY",
+    "FT8": "DG", "FT4": "DG", "JT65": "DG", "DIGI": "DG",
+}
+
 
 # ─── Translations ─────────────────────────────────────────────────────────────
 T = {
     "ro": {
-        "app_title": "YO Log PRO v16.2", "call": "Indicativ", "band": "Bandă", "mode": "Mod",
+        "app_title": "YO Log PRO v16.3", "call": "Indicativ", "band": "Bandă", "mode": "Mod",
         "rst_s": "RST S", "rst_r": "RST R", "serial_s": "Nr S", "serial_r": "Nr R",
         "freq": "Frecv (kHz)", "note": "Notă/Locator", "log": "LOG", "update": "ACTUALIZEAZĂ",
         "search": "🔍 Caută", "reset": "Reset", "settings": "⚙ Setări",
@@ -337,9 +353,12 @@ T = {
         "save_cat": "💾 Salvează",
         "exp_edi": "EDI (.edi)", "exp_print": "Print (.txt)",
         "hash_ok": "Hash MD5 OK", "hash_err": "Eroare hash",
+        "exp_cab2": "Cabrillo 2.0 (.log)",
+        "email_l": "Email:",
+        "soapbox": "SOAPBOX:",
     },
     "en": {
-        "app_title": "YO Log PRO v16.2", "call": "Callsign", "band": "Band", "mode": "Mode",
+        "app_title": "YO Log PRO v16.3", "call": "Callsign", "band": "Band", "mode": "Mode",
         "rst_s": "RST S", "rst_r": "RST R", "serial_s": "Nr S", "serial_r": "Nr R",
         "freq": "Freq (kHz)", "note": "Note/Locator", "log": "LOG", "update": "UPDATE",
         "search": "🔍 Search", "reset": "Reset", "settings": "⚙ Settings",
@@ -396,6 +415,9 @@ T = {
         "save_cat": "💾 Save",
         "exp_edi": "EDI (.edi)", "exp_print": "Print (.txt)",
         "hash_ok": "Hash MD5 OK", "hash_err": "Hash error",
+        "exp_cab2": "Cabrillo 2.0 (.log)",
+        "email_l": "Email:",
+        "soapbox": "SOAPBOX:",
     }
 }
 
@@ -472,7 +494,8 @@ DEFAULT_CFG = {
     "call": "YO8ACR", "loc": "KN37", "jud": "NT", "addr": "",
     "cat": 0, "fs": 11, "contest": "simplu", "county": "NT",
     "lang": "ro", "manual_dt": False, "sounds": True,
-    "op_name": "", "power": "100", "win_geo": ""
+    "op_name": "", "power": "100", "win_geo": "",
+    "email": ""
 }
 
 TH = {
@@ -516,13 +539,11 @@ class DM:
         if not os.path.exists(p):
             if default is not None:
                 DM.save(fn, default)
-            # ── FIX v16.2: was "if default" which is False for [] ──
             return copy.deepcopy(default) if default is not None else {}
         try:
             with open(p, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
-            # ── FIX v16.2: same fix here ──
             return copy.deepcopy(default) if default is not None else {}
 
     @staticmethod
@@ -531,7 +552,6 @@ class DM:
 
     @staticmethod
     def load_log(cid):
-        # ── FIX v16.2: guarantee we always return a list ──
         data = DM.load(DM.log_fn(cid), [])
         if not isinstance(data, list):
             return []
@@ -831,7 +851,6 @@ class ContestEditor(tk.Toplevel):
         self.transient(parent)
         self.grab_set()
         self._build()
-        # ── FIX v16.2: center on parent ──
         center_dialog(self, parent)
 
     def _build(self):
@@ -1059,7 +1078,6 @@ class ContestMgr(tk.Toplevel):
         self.grab_set()
         self._build()
         self._fill()
-        # ── FIX v16.2: center on parent ──
         center_dialog(self, parent)
 
     def _build(self):
@@ -1232,7 +1250,6 @@ class SearchDialog(tk.Toplevel):
         sb.pack(side="right", fill="y")
         tk.Button(self, text=L.t("close"), command=self.destroy,
                   bg=TH["btn_bg"], fg="white").pack(pady=8)
-        # ── FIX v16.2: center on parent ──
         center_dialog(self, parent)
 
     def _search(self, e=None):
@@ -1287,7 +1304,6 @@ class TimerDialog(tk.Toplevel):
         tk.Button(bf, text=L.t("timer_reset"), command=self._reset,
                   bg=TH["warn"], fg="white", font=("Consolas", 11), width=8).pack(side="left", padx=4)
         self._tick()
-        # ── FIX v16.2: center on parent ──
         center_dialog(self, parent)
 
     def _start(self):
@@ -1357,7 +1373,6 @@ class StatsWindow(tk.Toplevel):
         self.geometry("560x520")
         self.configure(bg=TH["bg"])
         self.transient(parent)
-        # ── FIX v16.2: center on parent ──
         center_dialog(self, parent)
 
         txt = scrolledtext.ScrolledText(self, bg=TH["entry_bg"], fg=TH["fg"],
@@ -1457,13 +1472,16 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.cfg = DM.load("config.json", DEFAULT_CFG.copy())
+        # ── Ensure new config keys exist ──
+        for k, v in DEFAULT_CFG.items():
+            if k not in self.cfg:
+                self.cfg[k] = v
         self.contests = DM.load("contests.json", DEFAULT_CONTESTS.copy())
         for k, v in DEFAULT_CONTESTS.items():
             if k not in self.contests:
                 self.contests[k] = copy.deepcopy(v)
         if self.cfg.get("contest", "") not in self.contests:
             self.cfg["contest"] = "simplu"
-        # ── FIX v16.2: ensure self.log is always a list ──
         self.log = DM.load_log(self.cfg.get("contest", "simplu"))
         if not isinstance(self.log, list):
             self.log = []
@@ -1901,7 +1919,6 @@ class App(tk.Tk):
             return
         cc = self._cc()
 
-        # ── FIX v16.2: ensure self.log is a list before insert ──
         if not isinstance(self.log, list):
             self.log = list(self.log) if self.log else []
 
@@ -2092,7 +2109,6 @@ class App(tk.Tk):
         DM.save_log(self._cid(), self.log)
         self.cfg["contest"] = self.cv.get()
         DM.save("config.json", self.cfg)
-        # ── FIX v16.2: ensure list on contest change ──
         self.log = DM.load_log(self._cid())
         if not isinstance(self.log, list):
             self.log = []
@@ -2143,7 +2159,6 @@ class App(tk.Tk):
         DM.save_log(self._cid(), self.log)
         self.cfg["contest"] = cid
         DM.save("config.json", self.cfg)
-        # ── FIX v16.2: ensure list on switch ──
         self.log = DM.load_log(cid)
         if not isinstance(self.log, list):
             self.log = []
@@ -2206,32 +2221,32 @@ class App(tk.Tk):
         d.geometry("460x280")
         d.configure(bg=TH["bg"])
         d.transient(self)
-        tk.Label(d, text="📻 YO Log PRO v16.2", bg=TH["bg"], fg=TH["accent"],
+        tk.Label(d, text="📻 YO Log PRO v16.3", bg=TH["bg"], fg=TH["accent"],
                  font=("Consolas", 16, "bold")).pack(pady=12)
         tk.Label(d, text=L.t("credits"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack(pady=8)
         tk.Label(d, text=L.t("usage"), bg=TH["bg"], fg=TH["fg"],
                  font=("Consolas", 9)).pack(pady=6)
         tk.Button(d, text=L.t("close"), command=d.destroy,
                   bg=TH["accent"], fg="white", width=12).pack(pady=10)
-        # ── FIX v16.2: center on parent ──
         center_dialog(d, self)
 
     def _settings(self):
         d = tk.Toplevel(self)
         d.title(L.t("settings"))
-        d.geometry("420x460")
+        d.geometry("420x500")
         d.configure(bg=TH["bg"])
         d.transient(self)
         eo = {"bg": TH["entry_bg"], "fg": TH["fg"], "font": self.fn,
                "insertbackground": TH["fg"]}
         fields = [
-            ("call",    L.t("call"),     self.cfg.get("call", "")),
-            ("loc",     L.t("locator"),  self.cfg.get("loc", "")),
-            ("jud",     L.t("county"),   self.cfg.get("jud", "")),
-            ("addr",    L.t("address"),  self.cfg.get("addr", "")),
-            ("op_name", L.t("op"),       self.cfg.get("op_name", "")),
-            ("power",   L.t("power"),    self.cfg.get("power", "100")),
-            ("fs",      L.t("font_size"),str(self.cfg.get("fs", 11))),
+            ("call",    L.t("call"),      self.cfg.get("call", "")),
+            ("loc",     L.t("locator"),   self.cfg.get("loc", "")),
+            ("jud",     L.t("county"),    self.cfg.get("jud", "")),
+            ("addr",    L.t("address"),   self.cfg.get("addr", "")),
+            ("op_name", L.t("op"),        self.cfg.get("op_name", "")),
+            ("power",   L.t("power"),     self.cfg.get("power", "100")),
+            ("email",   L.t("email_l"),   self.cfg.get("email", "")),
+            ("fs",      L.t("font_size"), str(self.cfg.get("fs", 11))),
         ]
         es = {}
         for k, lb, v in fields:
@@ -2262,7 +2277,6 @@ class App(tk.Tk):
 
         tk.Button(d, text=L.t("save"), command=save,
                   bg=TH["accent"], fg="white", width=12).pack(pady=12)
-        # ── FIX v16.2: center on parent ──
         center_dialog(d, self)
 
     def _stats(self):
@@ -2313,7 +2327,6 @@ class App(tk.Tk):
         tk.Button(d, text="CSV (.csv)",
                   command=lambda: [d.destroy(), self._import_csv()],
                   bg=TH["accent"], fg="white", width=22).pack(pady=8)
-        # ── FIX v16.2: center on parent ──
         center_dialog(d, self)
 
     def _import_adif(self):
@@ -2323,7 +2336,6 @@ class App(tk.Tk):
                 with open(fp, "r", encoding="utf-8", errors="replace") as f:
                     qsos = Importer.parse_adif(f.read())
                 if qsos:
-                    # ── FIX v16.2: ensure list before extend ──
                     if not isinstance(self.log, list):
                         self.log = []
                     self.log.extend(qsos)
@@ -2342,7 +2354,6 @@ class App(tk.Tk):
                 with open(fp, "r", encoding="utf-8", errors="replace") as f:
                     qsos = Importer.parse_csv(f.read())
                 if qsos:
-                    # ── FIX v16.2: ensure list before extend ──
                     if not isinstance(self.log, list):
                         self.log = []
                     self.log.extend(qsos)
@@ -2357,22 +2368,23 @@ class App(tk.Tk):
     def _export_dlg(self):
         d = tk.Toplevel(self)
         d.title(L.t("export"))
-        d.geometry("260x220")
+        d.geometry("280x280")
         d.configure(bg=TH["bg"])
         d.transient(self)
         for txt, cmd in [
-            ("Cabrillo 3.0 (.log)", lambda: self._exp_cab(d)),
-            ("ADIF 3.1 (.adi)",     lambda: self._exp_adif(d)),
-            ("CSV (.csv)",          lambda: self._exp_csv(d)),
-            (L.t("exp_edi"),        lambda: self._exp_edi(d)),
-            (L.t("exp_print"),      lambda: self._exp_print(d)),
+            ("Cabrillo 3.0 (.log)",     lambda: self._exp_cab(d)),
+            (L.t("exp_cab2"),           lambda: self._exp_cab2(d)),
+            ("ADIF 3.1 (.adi)",         lambda: self._exp_adif(d)),
+            ("CSV (.csv)",              lambda: self._exp_csv(d)),
+            (L.t("exp_edi"),            lambda: self._exp_edi(d)),
+            (L.t("exp_print"),          lambda: self._exp_print(d)),
         ]:
             tk.Button(d, text=txt, command=cmd,
-                      bg=TH["accent"], fg="white", width=24).pack(pady=4)
-        # ── FIX v16.2: center on parent ──
+                      bg=TH["accent"], fg="white", width=26).pack(pady=4)
         center_dialog(d, self)
 
     def _exp_cab(self, parent=None):
+        """Export Cabrillo 3.0 format."""
         try:
             my = self.cfg.get("call", "NOCALL")
             cc = self._cc()
@@ -2396,8 +2408,8 @@ class App(tk.Tk):
                 f"CATEGORY-MODE: MIXED",
                 f"NAME: {self.cfg.get('op_name', '')}",
                 f"ADDRESS: {self.cfg.get('addr', '')}",
-                f"SOAPBOX: Logged with YO Log PRO v16.2",
-                "CREATED-BY: YO Log PRO v16.2",
+                f"SOAPBOX: Logged with YO Log PRO v16.3",
+                "CREATED-BY: YO Log PRO v16.3",
             ]
             for q in self.log:
                 freq = q.get("f", "") or str(BAND_FREQ.get(q.get("b", ""), 0))
@@ -2425,13 +2437,103 @@ class App(tk.Tk):
         except Exception as e:
             messagebox.showerror(L.t("error"), str(e))
 
+    def _exp_cab2(self, parent=None):
+        """Export Cabrillo 2.0 format (compatible with LOGIX and similar programs)."""
+        try:
+            my = self.cfg.get("call", "NOCALL")
+            cc = self._cc()
+            nm = cc.get("name_en", cc.get("name_ro", "CONTEST")).upper()
+
+            # ── Category number: extract from first letter A=1, B=2, etc. ──
+            cat_val = self.cat_v.get() if self.cat_v else ""
+            cat_num = "1"
+            if cat_val:
+                m_cat = re.match(r'^([A-Za-z])', cat_val)
+                if m_cat:
+                    cat_num = str(ord(m_cat.group(1).upper()) - ord('A') + 1)
+                else:
+                    cats = cc.get("categories", ["Individual"])
+                    if cat_val in cats:
+                        cat_num = str(cats.index(cat_val) + 1)
+
+            # ── Claimed score ──
+            _, _, tot = Score.total(self.log, cc, self.cfg)
+
+            # ── Header ──
+            lines = [
+                "START-OF-LOG: 2.0",
+                "CREATED BY: YO Log PRO v16.3",
+                f"CONTEST: {nm}",
+                f"CALLSIGN: {my}",
+                f"NAME: {self.cfg.get('op_name', '')}",
+                f"CATEGORY: {cat_num}",
+                f"CLAIMED-SCORE: {tot}",
+                f"ADDRESS: {self.cfg.get('addr', '')}",
+                f"EMAIL: {self.cfg.get('email', '')}",
+                "SOAPBOX: Logged with YO Log PRO v16.3",
+                "SOAPBOX: 73 GL",
+                "SOAPBOX:  mo  yyyy mm dd hhmm call         rs exc call          rs exc",
+                "SOAPBOX:  ** ********** **** ************* **  ** ************* **  **",
+            ]
+
+            # ── My exchange (county or serial placeholder) ──
+            my_county = self.cfg.get("county", self.cfg.get("jud", "--"))
+
+            for q in self.log:
+                freq = q.get("f", "") or str(BAND_FREQ.get(q.get("b", ""), 0))
+                mode_raw = q.get("m", "SSB")
+                mode = CAB2_MODE_MAP.get(mode_raw, "PH")
+
+                # Date with hyphens (2026-03-05)
+                date = q.get("d", "")
+                if len(date) == 8 and "-" not in date:
+                    date = f"{date[:4]}-{date[4:6]}-{date[6:8]}"
+
+                # Time HHMM (no colon)
+                time_str = q.get("t", "").replace(":", "")[:4]
+
+                call = q.get("c", "")
+                rst_s = q.get("s", "59")
+                rst_r = q.get("r", "59")
+
+                # Exchange sent: serial number → county → "--"
+                exch_s = q.get("ss", "").strip()
+                if not exch_s:
+                    exch_s = my_county if my_county else "--"
+
+                # Exchange received: serial number → note → "--"
+                exch_r = q.get("sr", "").strip()
+                if not exch_r:
+                    note = q.get("n", "").strip()
+                    exch_r = note if note else "--"
+
+                lines.append(
+                    f"QSO: {freq} {mode} {date} {time_str} "
+                    f"{my:<13} {rst_s:>2}  {exch_s:<2} "
+                    f"{call:<13} {rst_r:>2}  {exch_r:<2}"
+                )
+
+            lines.append("END-OF-LOG:")
+
+            fn = (f"cabrillo2_{self._cid()}_"
+                  f"{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.log")
+            fp = os.path.join(get_data_dir(), fn)
+            with open(fp, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+            messagebox.showinfo(L.t("exp_ok"), f"→ {fn}")
+            if parent:
+                parent.destroy()
+        except Exception as e:
+            messagebox.showerror(L.t("error"), str(e))
+
     def _exp_adif(self, parent=None):
+        """Export ADIF 3.1 format."""
         try:
             my_loc = self.cfg.get("loc", "")
             lines = [
                 "<ADIF_VER:5>3.1.0",
                 f"<PROGRAMID:14>YO_Log_PRO_v16",
-                "<PROGRAMVERSION:5>16.2",
+                "<PROGRAMVERSION:5>16.3",
                 f"<MY_GRIDSQUARE:{len(my_loc)}>{my_loc}",
                 "<EOH>",
             ]
@@ -2488,6 +2590,7 @@ class App(tk.Tk):
             messagebox.showerror(L.t("error"), str(e))
 
     def _exp_csv(self, parent=None):
+        """Export CSV format."""
         try:
             fn = f"log_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.csv"
             fp = os.path.join(get_data_dir(), fn)
@@ -2516,6 +2619,7 @@ class App(tk.Tk):
             messagebox.showerror(L.t("error"), str(e))
 
     def _exp_edi(self, parent=None):
+        """Export EDI format."""
         try:
             my = self.cfg.get("call", "NOCALL")
             my_loc = self.cfg.get("loc", "")
@@ -2533,7 +2637,7 @@ class App(tk.Tk):
                 f"PBand=144",
                 f"PSect=",
                 "[Remarks]",
-                "Logged with YO Log PRO v16.2",
+                "Logged with YO Log PRO v16.3",
                 "[QSORecords]",
             ]
             for q in self.log:
@@ -2561,13 +2665,14 @@ class App(tk.Tk):
             messagebox.showerror(L.t("error"), str(e))
 
     def _exp_print(self, parent=None):
+        """Export printable text format."""
         try:
             my = self.cfg.get("call", "NOCALL")
             cc = self._cc()
             nm = cc.get("name_" + L.g(), cc.get("name_ro", "?"))
             lines = [
                 f"{'=' * 90}",
-                f"YO Log PRO v16.2  —  {my}  —  {nm}",
+                f"YO Log PRO v16.3  —  {my}  —  {nm}",
                 f"Generat / Generated: {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC",
                 f"{'=' * 90}",
                 f"{'Nr':<4} {'Call':<13} {'Freq':<8} {'Band':<6} {'Mode':<6} "
