@@ -1,11 +1,11 @@
 
 # 📻 YO Log PRO v16.2 FINAL — Professional Multi-Contest Amateur Radio Logger
 """
-YO Log PRO v16.1 FINAL — Professional Multi-Contest Amateur Radio Logger
+YO Log PRO v16.2 FINAL — Professional Multi-Contest Amateur Radio Logger
 Developed by: Ardei Constantin-Cătălin (YO8ACR)
 Email: yo8acr@gmail.com
 """
-YO Log PRO v16.1 FINAL — Înregistrator radio amator multi-concurs profesional
+YO Log PRO v16.2 FINAL — Înregistrator radio amator multi-concurs profesional
 Dezvoltat de: Ardei Constantin-Cătălin (YO8ACR)
 Email: yo8acr@gmail.com
 
