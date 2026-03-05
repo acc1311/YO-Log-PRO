@@ -4,6 +4,29 @@
 YO Log PRO v16.0 FINAL — Professional Multi-Contest Amateur Radio Logger
 Developed by: Ardei Constantin-Cătălin (YO8ACR)
 Email: yo8acr@gmail.com
+
+FIXES v16.1:
+- ContestEditor: fields for categories, bands, modes, required_stations, special_scoring, band_points, county_list fully editable
+- ContestMgr: Duplicate + Export + Import buttons added
+- Stats window: full detailed stats (bands, modes, DXCC, worked-all, operating time, rate)
+- Cabrillo export: full 3.0 header with CONTEST, CATEGORY-*, NAME, ADDRESS, SOAPBOX
+- ADIF export: FREQ in MHz, GRIDSQUARE, MY_GRIDSQUARE, STX, SRX
+- EDI export: added
+- Print text export: added
+- Validate: improved messages, checks forbidden bands/modes
+- Score label: shows Σ QSO×MULT=TOTAL format
+- Worked-before indicator: shows worked other band/mode in yellow
+- Search dialog: Ctrl+F, live filter
+- Timer dialog: contest countdown
+- Hash verify: MD5 check
+- Sound: beep on new multiplier, duplicate
+- Settings: addr, font size, sounds checkbox
+- Config: category/county save button fixed
+- Rate meter: QSO/h live
+- Geometry save/restore
+- Scrollbar on ContestEditor (tall form)
+- Auto-RST on band change fix
+- Clear log with backup
 """
 
 import os
@@ -19,7 +42,7 @@ import hashlib
 from pathlib import Path
 from collections import Counter, deque
 import tkinter as tk
-from tkinter import ttk, messagebox, Menu, filedialog
+from tkinter import ttk, messagebox, Menu, filedialog, scrolledtext
 
 try:
     if sys.platform == "win32":
@@ -43,10 +66,11 @@ def beep(kind="info"):
     try:
         m = {"error": 0x10, "warning": 0x30, "success": 0x40, "info": 0x0}
         winsound.MessageBeep(m.get(kind, 0x0))
-    except:
+    except Exception:
         pass
 
 
+# ─── Maidenhead / Haversine ─────────────────────────────────────────────────
 class Loc:
     @staticmethod
     def to_latlon(loc):
@@ -62,10 +86,10 @@ class Loc:
                 lon += (ord(loc[4]) - 65) * (2 / 24) + 1 / 24
                 lat += (ord(loc[5]) - 65) * (1 / 24) + 0.5 / 24
             else:
-                lon += 1
+                lon += 1.0
                 lat += 0.5
             return lat, lon
-        except:
+        except Exception:
             return None, None
 
     @staticmethod
@@ -77,67 +101,85 @@ class Loc:
         R = 6371.0
         d1 = math.radians(la2 - la1)
         d2 = math.radians(lo2 - lo1)
-        a_ = (math.sin(d1 / 2) ** 2 + math.cos(math.radians(la1)) * math.cos(math.radians(la2)) * math.sin(d2 / 2) ** 2)
+        a_ = (math.sin(d1 / 2) ** 2
+               + math.cos(math.radians(la1)) * math.cos(math.radians(la2))
+               * math.sin(d2 / 2) ** 2)
         return round(R * 2 * math.atan2(math.sqrt(a_), math.sqrt(1 - a_)), 1)
 
     @staticmethod
     def valid(s):
         s = s.upper().strip()
         if len(s) == 4:
-            return s[0:2].isalpha() and s[2:4].isdigit() and 'A' <= s[0] <= 'R' and 'A' <= s[1] <= 'R'
+            return (s[0:2].isalpha() and s[2:4].isdigit()
+                    and 'A' <= s[0] <= 'R' and 'A' <= s[1] <= 'R')
         if len(s) == 6:
-            return (s[0:2].isalpha() and s[2:4].isdigit() and s[4:6].isalpha() and 'A' <= s[0] <= 'R' and 'A' <= s[1] <= 'R' and 'A' <= s[4] <= 'X' and 'A' <= s[5] <= 'X')
+            return (s[0:2].isalpha() and s[2:4].isdigit() and s[4:6].isalpha()
+                    and 'A' <= s[0] <= 'R' and 'A' <= s[1] <= 'R'
+                    and 'A' <= s[4] <= 'X' and 'A' <= s[5] <= 'X')
         return False
 
 
+# ─── DXCC Database ───────────────────────────────────────────────────────────
 class DXCC:
     DB = {
         "YO": "Romania", "YP": "Romania", "YQ": "Romania", "YR": "Romania",
-        "DL": "Germany", "DJ": "Germany", "DK": "Germany", "DA": "Germany", "DB": "Germany",
-        "DC": "Germany", "DD": "Germany", "DF": "Germany", "DG": "Germany", "DH": "Germany", "DM": "Germany",
-        "G": "England", "M": "England", "2E": "England", "GW": "Wales", "GM": "Scotland",
-        "GI": "N. Ireland", "GD": "Isle of Man", "GJ": "Jersey", "GU": "Guernsey",
-        "F": "France", "TM": "France", "HB9": "Switzerland", "HB": "Switzerland",
+        "DL": "Germany", "DJ": "Germany", "DK": "Germany", "DA": "Germany",
+        "DB": "Germany", "DC": "Germany", "DD": "Germany", "DF": "Germany",
+        "DG": "Germany", "DH": "Germany", "DM": "Germany",
+        "G": "England", "M": "England", "2E": "England",
+        "GW": "Wales", "GM": "Scotland", "GI": "N. Ireland",
+        "GD": "Isle of Man", "GJ": "Jersey", "GU": "Guernsey",
+        "F": "France", "TM": "France",
+        "HB9": "Switzerland", "HB": "Switzerland",
         "I": "Italy", "IK": "Italy", "IZ": "Italy", "IW": "Italy", "IN3": "Italy",
         "EA": "Spain", "EB": "Spain", "EC": "Spain", "EE": "Spain",
         "CT": "Portugal", "CS": "Portugal", "CU": "Azores",
         "SP": "Poland", "SQ": "Poland", "SN": "Poland", "SO": "Poland", "3Z": "Poland",
-        "HA": "Hungary", "HG": "Hungary", "OK": "Czech Rep.", "OL": "Czech Rep.",
+        "HA": "Hungary", "HG": "Hungary",
+        "OK": "Czech Rep.", "OL": "Czech Rep.",
         "OM": "Slovak Rep.", "LZ": "Bulgaria",
         "UR": "Ukraine", "US": "Ukraine", "UT": "Ukraine", "UX": "Ukraine", "UY": "Ukraine",
         "UA": "Russia", "RU": "Russia", "RV": "Russia", "RW": "Russia", "RA": "Russia",
-        "OE": "Austria", "ON": "Belgium", "OO": "Belgium", "OR": "Belgium", "OT": "Belgium",
+        "OE": "Austria",
+        "ON": "Belgium", "OO": "Belgium", "OR": "Belgium", "OT": "Belgium",
         "PA": "Netherlands", "PB": "Netherlands", "PD": "Netherlands", "PE": "Netherlands",
         "OZ": "Denmark", "OU": "Denmark", "5Q": "Denmark",
         "SM": "Sweden", "SA": "Sweden", "SB": "Sweden", "SK": "Sweden",
         "LA": "Norway", "LB": "Norway", "LC": "Norway",
         "OH": "Finland", "OF": "Finland", "OG": "Finland", "OI": "Finland",
-        "ES": "Estonia", "YL": "Latvia", "LY": "Lithuania", "9A": "Croatia",
-        "S5": "Slovenia", "S51": "Slovenia", "S52": "Slovenia", "S57": "Slovenia",
+        "ES": "Estonia", "YL": "Latvia", "LY": "Lithuania",
+        "9A": "Croatia", "S5": "Slovenia",
         "E7": "Bosnia", "Z3": "N. Macedonia", "Z6": "Kosovo", "ZA": "Albania",
         "SV": "Greece", "SW": "Greece", "SX": "Greece", "SY": "Greece",
-        "TA": "Turkey", "TC": "Turkey", "YM": "Turkey", "4X": "Israel", "4Z": "Israel",
+        "TA": "Turkey", "TC": "Turkey", "YM": "Turkey",
+        "4X": "Israel", "4Z": "Israel",
         "SU": "Egypt", "CN": "Morocco", "7X": "Algeria", "3V": "Tunisia",
         "ZS": "South Africa", "ZR": "South Africa", "ZU": "South Africa",
-        "W": "USA", "K": "USA", "N": "USA", "AA": "USA", "AB": "USA", "AC": "USA",
-        "AD": "USA", "AE": "USA", "AF": "USA", "AG": "USA", "AI": "USA", "AK": "USA",
+        "W": "USA", "K": "USA", "N": "USA",
+        "AA": "USA", "AB": "USA", "AC": "USA", "AD": "USA", "AE": "USA",
+        "AF": "USA", "AG": "USA", "AI": "USA", "AK": "USA",
         "KH6": "Hawaii", "KL7": "Alaska", "KP4": "Puerto Rico",
         "VE": "Canada", "VA": "Canada", "VY": "Canada", "VO": "Canada",
         "XE": "Mexico", "XA": "Mexico", "4A": "Mexico",
-        "PY": "Brazil", "PP": "Brazil", "PR": "Brazil", "PS": "Brazil", "PT": "Brazil", "PU": "Brazil",
+        "PY": "Brazil", "PP": "Brazil", "PR": "Brazil", "PS": "Brazil",
+        "PT": "Brazil", "PU": "Brazil",
         "LU": "Argentina", "LW": "Argentina", "LO": "Argentina",
         "CE": "Chile", "CA": "Chile", "XQ": "Chile",
-        "JA": "Japan", "JH": "Japan", "JR": "Japan", "JE": "Japan", "JF": "Japan",
-        "JG": "Japan", "JI": "Japan", "JJ": "Japan", "JK": "Japan", "JL": "Japan",
+        "JA": "Japan", "JH": "Japan", "JR": "Japan", "JE": "Japan",
+        "JF": "Japan", "JG": "Japan", "JI": "Japan", "JJ": "Japan",
+        "JK": "Japan", "JL": "Japan",
         "BY": "China", "BA": "China", "BD": "China", "BG": "China", "BI": "China",
         "HL": "S. Korea", "DS": "S. Korea", "6K": "S. Korea",
-        "DU": "Philippines", "DX": "Philippines", "HS": "Thailand", "E2": "Thailand",
-        "VK": "Australia", "AX": "Australia", "ZL": "New Zealand", "ZM": "New Zealand",
+        "DU": "Philippines", "DX": "Philippines",
+        "HS": "Thailand", "E2": "Thailand",
+        "VK": "Australia", "AX": "Australia",
+        "ZL": "New Zealand", "ZM": "New Zealand",
         "VU": "India", "AT": "India", "VT": "India", "AP": "Pakistan",
         "A4": "Oman", "A6": "UAE", "A7": "Qatar", "A9": "Bahrain",
         "9K": "Kuwait", "HZ": "Saudi Arabia", "7Z": "Saudi Arabia",
         "EK": "Armenia", "4J": "Azerbaijan", "4L": "Georgia",
-        "UN": "Kazakhstan", "JT": "Mongolia", "XV": "Vietnam", "3W": "Vietnam",
+        "UN": "Kazakhstan", "JT": "Mongolia",
+        "XV": "Vietnam", "3W": "Vietnam",
         "TF": "Iceland", "JW": "Svalbard", "OX": "Greenland", "OY": "Faroe Is.",
         "T7": "San Marino", "3A": "Monaco", "C3": "Andorra", "HV": "Vatican",
         "9H": "Malta", "5B": "Cyprus", "4O": "Montenegro",
@@ -160,6 +202,7 @@ class DXCC:
         return p
 
 
+# ─── Frequency / Band maps ───────────────────────────────────────────────────
 FREQ_MAP = {
     (1800, 2000): "160m", (3500, 3800): "80m", (5351, 5367): "60m",
     (7000, 7200): "40m", (10100, 10150): "30m", (14000, 14350): "20m",
@@ -174,7 +217,11 @@ BAND_FREQ = {
     "6m": 50150, "2m": 145000, "70cm": 432200, "23cm": 1296200,
 }
 
-RST_DEFAULTS = {"SSB": "59", "AM": "59", "FM": "59", "CW": "599", "RTTY": "599", "PSK31": "599", "DIGI": "599", "FT8": "-10", "FT4": "-10", "JT65": "-15", "SSTV": "59"}
+RST_DEFAULTS = {
+    "SSB": "59", "AM": "59", "FM": "59", "SSTV": "59",
+    "CW": "599", "RTTY": "599", "PSK31": "599", "DIGI": "599",
+    "FT8": "-10", "FT4": "-10", "JT65": "-15",
+}
 
 
 def freq2band(f):
@@ -183,7 +230,7 @@ def freq2band(f):
         for (lo, hi), b in FREQ_MAP.items():
             if lo <= f <= hi:
                 return b
-    except:
+    except Exception:
         pass
     return None
 
@@ -194,12 +241,18 @@ BANDS_UHF = ["70cm", "23cm"]
 BANDS_ALL = BANDS_HF + BANDS_VHF + BANDS_UHF
 MODES_ALL = ["SSB", "CW", "DIGI", "FT8", "FT4", "RTTY", "AM", "FM", "PSK31", "SSTV", "JT65"]
 SCORING_MODES = ["none", "per_qso", "per_band", "maraton", "multiplier", "distance", "custom"]
-CONTEST_TYPES = ["Simplu", "Maraton", "Stafeta", "YO", "DX", "VHF", "UHF", "Field Day", "Sprint", "QSO Party", "SOTA", "POTA", "Custom"]
-YO_COUNTIES = ["AB", "AR", "AG", "BC", "BH", "BN", "BT", "BV", "BR", "BZ", "CS", "CL", "CJ", "CT", "CV", "DB", "DJ", "GL", "GR", "GJ", "HR", "HD", "IL", "IS", "IF", "MM", "MH", "MS", "NT", "OT", "PH", "SM", "SJ", "SB", "SV", "TR", "TM", "TL", "VS", "VL", "VN", "B"]
+CONTEST_TYPES = ["Simplu", "Maraton", "Stafeta", "YO", "DX", "VHF", "UHF",
+                 "Field Day", "Sprint", "QSO Party", "SOTA", "POTA", "Custom"]
+YO_COUNTIES = ["AB", "AR", "AG", "BC", "BH", "BN", "BT", "BV", "BR", "BZ",
+               "CS", "CL", "CJ", "CT", "CV", "DB", "DJ", "GL", "GR", "GJ",
+               "HR", "HD", "IL", "IS", "IF", "MM", "MH", "MS", "NT", "OT",
+               "PH", "SM", "SJ", "SB", "SV", "TR", "TM", "TL", "VS", "VL", "VN", "B"]
 
+
+# ─── Translations ─────────────────────────────────────────────────────────────
 T = {
     "ro": {
-        "app_title": "YO Log PRO v16.0 FINAL", "call": "Indicativ", "band": "Bandă", "mode": "Mod",
+        "app_title": "YO Log PRO v16.1", "call": "Indicativ", "band": "Bandă", "mode": "Mod",
         "rst_s": "RST S", "rst_r": "RST R", "serial_s": "Nr S", "serial_r": "Nr R",
         "freq": "Frecv (kHz)", "note": "Notă/Locator", "log": "LOG", "update": "ACTUALIZEAZĂ",
         "search": "🔍 Caută", "reset": "Reset", "settings": "⚙ Setări",
@@ -219,36 +272,44 @@ T = {
         "sett_ok": "Setări salvate!", "locator": "Locator:", "address": "Adresă:",
         "font_size": "Font:", "station_info": "Info Stație:",
         "contest_mgr": "Manager Concursuri", "contests": "Concursuri",
-        "add_c": "➕ Adaugă", "edit_c": "✏ Editează", "del_c": "🗑 Șterge", "dup_c": "📋 Duplică",
+        "add_c": "➕ Adaugă", "edit_c": "✏ Editează", "del_c": "🗑 Șterge",
+        "dup_c": "📋 Duplică", "exp_c": "📤 Export JSON", "imp_c": "📥 Import JSON",
         "c_name": "Nume Concurs:", "c_type": "Tip:", "sc_mode": "Punctare:",
-        "cats": "Categorii:", "a_bands": "Benzi:", "a_modes": "Moduri:",
-        "req_st_c": "Stații Obligatorii:", "sp_sc": "Punctare Specială:",
+        "cats": "Categorii (o linie):", "a_bands": "Benzi permise:", "a_modes": "Moduri permise:",
+        "req_st_c": "Stații Obligatorii (o linie):", "sp_sc": "Punctare Specială (CALL=PTS):",
         "ppq": "Puncte/QSO:", "min_qso": "Min QSO:", "use_serial": "Nr. Seriale",
-        "use_county": "Județ", "county_list": "Județe:", "no_sel": "Neselectat!",
+        "use_county": "Județ", "county_list": "Județe (virgulă):", "no_sel": "Neselectat!",
         "del_c_conf": "Ștergeți '{}'?", "c_saved": "Salvat!", "c_del": "Șters!",
         "c_exists": "ID existent!", "c_default": "Protejat!", "c_id": "ID Concurs:",
-        "mults": "Multiplicatori:", "band_pts": "Puncte/Bandă:", "nr": "Nr.", "pts": "Pt",
-        "imp_c": "📥 Import", "exp_c": "📤 Export",
+        "mults": "Multiplicatori:", "band_pts": "Puncte/Bandă (BAND=PTS):",
+        "nr": "Nr.", "pts": "Pt",
         "dup_warn": "⚠ Duplicat!", "dup_msg": "{} pe {} {}!\nQSO #{}\n\nAdăugați?",
         "search_t": "Căutare", "search_l": "Caută:", "results": "Rezultate",
         "no_res": "Nimic găsit.", "undo": "↩ Undo", "undo_ok": "Anulat.",
         "undo_empty": "Nimic de anulat.", "rate": "QSO/h", "timer": "⏱ Timer",
-        "timer_t": "Timer", "timer_start": "▶ Start", "timer_stop": "⏸ Stop",
+        "timer_t": "Timer Concurs", "timer_start": "▶ Start", "timer_stop": "⏸ Stop",
         "timer_reset": "⏹ Reset", "elapsed": "Scurs:", "remaining": "Rămas:",
-        "dur_h": "Durată (h):", "band_sum": "Benzi", "distance": "Dist",
-        "country": "Țara", "utc": "UTC", "autosaved": "Salvat",
+        "dur_h": "Durată (ore):", "band_sum": "Benzi",
+        "distance": "Dist", "country": "Țara", "utc": "UTC", "autosaved": "Salvat",
         "sounds": "Sunete", "en_sounds": "Activează sunete",
         "qso_pts": "Puncte QSO", "mult_c": "Multiplicatori", "new_mult": "✦ MULT NOU!",
         "op": "Operator:", "power": "Putere (W):", "f_band": "Bandă:", "f_mode": "Mod:",
-        "all": "Toate", "clear_log": "🗑 Golire", "clear_conf": "Goliți COMPLET logul?\nIREVERSIBIL!",
-        "wb": "Lucrat", "imp_adif": "Import ADIF", "imp_csv": "Import CSV",
+        "all": "Toate", "clear_log": "🗑 Golire log",
+        "clear_conf": "Goliți COMPLET logul?\nSe va face backup automat!\nIREVERSIBIL!",
+        "wb": "Lucrat alt QRG", "imp_adif": "Import ADIF", "imp_csv": "Import CSV",
         "imp_ok": "Importate {} QSO!", "imp_err": "Eroare import!",
-        "qso_total": "Total QSO", "unique": "Unice", "countries": "Țări", "print_log": "🖨 Print",
+        "qso_total": "Total QSO", "unique": "Unice", "countries": "Țări",
+        "print_log": "🖨 Print",
         "verify": "Verificare log", "verify_ok": "Log integru: {} QSO, hash: {}",
-        "score_f": "Scor", "worked_all": "Status Complet", "worked_x": "Lucrate: {}/{}", "missing_x": "Lipsesc: {}",
+        "score_f": "Scor", "worked_all": "Status Complet",
+        "worked_x": "Lucrate: {}/{}", "missing_x": "Lipsesc: {}",
+        "tools": "🛠 Utilități", "clear_c": "Golire log curent",
+        "save_cat": "💾 Salvează",
+        "exp_edi": "EDI (.edi)", "exp_print": "Print (.txt)",
+        "hash_ok": "Hash MD5 OK", "hash_err": "Eroare hash",
     },
     "en": {
-        "app_title": "YO Log PRO v16.0 FINAL", "call": "Callsign", "band": "Band", "mode": "Mode",
+        "app_title": "YO Log PRO v16.1", "call": "Callsign", "band": "Band", "mode": "Mode",
         "rst_s": "RST S", "rst_r": "RST R", "serial_s": "Nr S", "serial_r": "Nr R",
         "freq": "Freq (kHz)", "note": "Note/Locator", "log": "LOG", "update": "UPDATE",
         "search": "🔍 Search", "reset": "Reset", "settings": "⚙ Settings",
@@ -268,47 +329,134 @@ T = {
         "sett_ok": "Settings saved!", "locator": "Locator:", "address": "Address:",
         "font_size": "Font:", "station_info": "Station Info:",
         "contest_mgr": "Contest Manager", "contests": "Contests",
-        "add_c": "➕ Add", "edit_c": "✏ Edit", "del_c": "🗑 Delete", "dup_c": "📋 Duplicate",
+        "add_c": "➕ Add", "edit_c": "✏ Edit", "del_c": "🗑 Delete",
+        "dup_c": "📋 Duplicate", "exp_c": "📤 Export JSON", "imp_c": "📥 Import JSON",
         "c_name": "Contest Name:", "c_type": "Type:", "sc_mode": "Scoring:",
-        "cats": "Categories:", "a_bands": "Bands:", "a_modes": "Modes:",
-        "req_st_c": "Required Stations:", "sp_sc": "Special Scoring:",
+        "cats": "Categories (one per line):", "a_bands": "Allowed Bands:",
+        "a_modes": "Allowed Modes:",
+        "req_st_c": "Required Stations (one per line):",
+        "sp_sc": "Special Scoring (CALL=PTS):",
         "ppq": "Points/QSO:", "min_qso": "Min QSO:", "use_serial": "Serial Numbers",
-        "use_county": "County", "county_list": "Counties:", "no_sel": "Not selected!",
+        "use_county": "County", "county_list": "Counties (comma sep):", "no_sel": "Not selected!",
         "del_c_conf": "Delete '{}'?", "c_saved": "Saved!", "c_del": "Deleted!",
         "c_exists": "ID exists!", "c_default": "Protected!", "c_id": "Contest ID:",
-        "mults": "Multipliers:", "band_pts": "Band Points:", "nr": "Nr.", "pts": "Pt",
-        "imp_c": "📥 Import", "exp_c": "📤 Export",
+        "mults": "Multipliers:", "band_pts": "Band Points (BAND=PTS):",
+        "nr": "Nr.", "pts": "Pt",
         "dup_warn": "⚠ Duplicate!", "dup_msg": "{} on {} {}!\nQSO #{}\n\nAdd anyway?",
         "search_t": "Search", "search_l": "Search:", "results": "Results",
         "no_res": "No results.", "undo": "↩ Undo", "undo_ok": "Undone.",
         "undo_empty": "Nothing to undo.", "rate": "QSO/h", "timer": "⏱ Timer",
-        "timer_t": "Timer", "timer_start": "▶ Start", "timer_stop": "⏸ Stop",
+        "timer_t": "Contest Timer", "timer_start": "▶ Start", "timer_stop": "⏸ Stop",
         "timer_reset": "⏹ Reset", "elapsed": "Elapsed:", "remaining": "Remaining:",
-        "dur_h": "Duration (h):", "band_sum": "Bands", "distance": "Dist",
-        "country": "Country", "utc": "UTC", "autosaved": "Saved",
+        "dur_h": "Duration (hours):", "band_sum": "Bands",
+        "distance": "Dist", "country": "Country", "utc": "UTC", "autosaved": "Saved",
         "sounds": "Sounds", "en_sounds": "Enable sounds",
         "qso_pts": "QSO Points", "mult_c": "Multipliers", "new_mult": "✦ NEW MULT!",
         "op": "Operator:", "power": "Power (W):", "f_band": "Band:", "f_mode": "Mode:",
-        "all": "All", "clear_log": "🗑 Clear", "clear_conf": "Clear ENTIRE log?\nIRREVERSIBLE!",
-        "wb": "Worked", "imp_adif": "Import ADIF", "imp_csv": "Import CSV",
+        "all": "All", "clear_log": "🗑 Clear log",
+        "clear_conf": "Clear ENTIRE log?\nAuto-backup will be created!\nIRREVERSIBLE!",
+        "wb": "Worked other QRG", "imp_adif": "Import ADIF", "imp_csv": "Import CSV",
         "imp_ok": "Imported {} QSOs!", "imp_err": "Import error!",
-        "qso_total": "Total QSO", "unique": "Unique", "countries": "Countries", "print_log": "🖨 Print",
+        "qso_total": "Total QSO", "unique": "Unique", "countries": "Countries",
+        "print_log": "🖨 Print",
         "verify": "Verify Log", "verify_ok": "Log OK: {} QSOs, hash: {}",
-        "score_f": "Score", "worked_all": "Completion Status", "worked_x": "Worked: {}/{}", "missing_x": "Missing: {}",
+        "score_f": "Score", "worked_all": "Completion Status",
+        "worked_x": "Worked: {}/{}", "missing_x": "Missing: {}",
+        "tools": "🛠 Tools", "clear_c": "Clear current log",
+        "save_cat": "💾 Save",
+        "exp_edi": "EDI (.edi)", "exp_print": "Print (.txt)",
+        "hash_ok": "Hash MD5 OK", "hash_err": "Hash error",
     }
 }
 
+# ─── Default Contests ────────────────────────────────────────────────────────
 DEFAULT_CONTESTS = {
-    "simplu": {"name_ro": "Log Simplu", "name_en": "Simple Log", "contest_type": "Simplu", "categories": ["Individual"], "scoring_mode": "none", "points_per_qso": 1, "min_qso": 0, "allowed_bands": list(BANDS_ALL), "allowed_modes": list(MODES_ALL), "required_stations": [], "special_scoring": {}, "use_serial": False, "use_county": False, "county_list": [], "multiplier_type": "none", "band_points": {}, "is_default": True},
-    "maraton": {"name_ro": "Maraton", "name_en": "Marathon", "contest_type": "Maraton", "categories": ["A. Seniori YO", "B. YL", "C. Juniori YO", "D. Club", "E. DX", "F. Receptori"], "scoring_mode": "maraton", "points_per_qso": 1, "min_qso": 100, "allowed_bands": BANDS_HF + BANDS_VHF, "allowed_modes": list(MODES_ALL), "required_stations": [], "special_scoring": {}, "use_serial": False, "use_county": True, "county_list": list(YO_COUNTIES), "multiplier_type": "county", "band_points": {}, "is_default": False},
-    "yo-dx-hf": {"name_ro": "YO DX HF Contest", "name_en": "YO DX HF Contest", "contest_type": "DX", "categories": ["A. SO AB High", "B. SO AB Low", "C. SO SB"], "scoring_mode": "per_band", "points_per_qso": 1, "min_qso": 0, "allowed_bands": ["160m", "80m", "40m", "20m", "15m", "10m"], "allowed_modes": ["SSB", "CW"], "required_stations": [], "special_scoring": {}, "use_serial": True, "use_county": True, "county_list": list(YO_COUNTIES), "multiplier_type": "dxcc", "band_points": {"160m": 4, "80m": 3, "40m": 2, "20m": 1, "15m": 1, "10m": 2}, "is_default": False},
+    "simplu": {
+        "name_ro": "Log Simplu", "name_en": "Simple Log", "contest_type": "Simplu",
+        "categories": ["Individual"], "scoring_mode": "none", "points_per_qso": 1,
+        "min_qso": 0, "allowed_bands": list(BANDS_ALL), "allowed_modes": list(MODES_ALL),
+        "required_stations": [], "special_scoring": {}, "use_serial": False,
+        "use_county": False, "county_list": [], "multiplier_type": "none",
+        "band_points": {}, "is_default": True
+    },
+    "maraton": {
+        "name_ro": "Maraton", "name_en": "Marathon", "contest_type": "Maraton",
+        "categories": ["A. Seniori YO", "B. YL", "C. Juniori YO", "D. Club", "E. DX", "F. Receptori"],
+        "scoring_mode": "maraton", "points_per_qso": 1, "min_qso": 100,
+        "allowed_bands": BANDS_HF + BANDS_VHF, "allowed_modes": list(MODES_ALL),
+        "required_stations": [], "special_scoring": {}, "use_serial": False,
+        "use_county": True, "county_list": list(YO_COUNTIES),
+        "multiplier_type": "county", "band_points": {}, "is_default": False
+    },
+    "stafeta": {
+        "name_ro": "Ștafetă", "name_en": "Relay", "contest_type": "Stafeta",
+        "categories": ["A. Senior", "B. YL", "C. Junior"],
+        "scoring_mode": "per_qso", "points_per_qso": 2, "min_qso": 50,
+        "allowed_bands": BANDS_HF, "allowed_modes": ["SSB", "CW"],
+        "required_stations": [], "special_scoring": {}, "use_serial": True,
+        "use_county": True, "county_list": list(YO_COUNTIES),
+        "multiplier_type": "county", "band_points": {}, "is_default": False
+    },
+    "yo-dx-hf": {
+        "name_ro": "YO DX HF Contest", "name_en": "YO DX HF Contest", "contest_type": "DX",
+        "categories": ["A. SO AB High", "B. SO AB Low", "C. SO SB"],
+        "scoring_mode": "per_band", "points_per_qso": 1, "min_qso": 0,
+        "allowed_bands": ["160m", "80m", "40m", "20m", "15m", "10m"],
+        "allowed_modes": ["SSB", "CW"],
+        "required_stations": [], "special_scoring": {}, "use_serial": True,
+        "use_county": True, "county_list": list(YO_COUNTIES),
+        "multiplier_type": "dxcc",
+        "band_points": {"160m": 4, "80m": 3, "40m": 2, "20m": 1, "15m": 1, "10m": 2},
+        "is_default": False
+    },
+    "yo-vhf": {
+        "name_ro": "YO VHF Contest", "name_en": "YO VHF Contest", "contest_type": "VHF",
+        "categories": ["A. Fixed", "B. Mobile", "C. Portable"],
+        "scoring_mode": "distance", "points_per_qso": 1, "min_qso": 0,
+        "allowed_bands": ["6m", "2m", "70cm", "23cm"], "allowed_modes": ["SSB", "CW", "FM"],
+        "required_stations": [], "special_scoring": {}, "use_serial": True,
+        "use_county": False, "county_list": [],
+        "multiplier_type": "grid", "band_points": {}, "is_default": False
+    },
+    "field-day": {
+        "name_ro": "Field Day", "name_en": "Field Day", "contest_type": "Field Day",
+        "categories": ["1A", "2A", "3A", "1B", "2B"],
+        "scoring_mode": "per_qso", "points_per_qso": 2, "min_qso": 0,
+        "allowed_bands": list(BANDS_HF), "allowed_modes": list(MODES_ALL),
+        "required_stations": [], "special_scoring": {}, "use_serial": False,
+        "use_county": False, "county_list": [],
+        "multiplier_type": "none", "band_points": {}, "is_default": False
+    },
+    "sprint": {
+        "name_ro": "Sprint", "name_en": "Sprint", "contest_type": "Sprint",
+        "categories": ["A. Single Op", "B. Multi Op"],
+        "scoring_mode": "per_qso", "points_per_qso": 1, "min_qso": 0,
+        "allowed_bands": ["40m", "20m", "15m", "10m"], "allowed_modes": ["SSB", "CW"],
+        "required_stations": [], "special_scoring": {}, "use_serial": True,
+        "use_county": False, "county_list": [],
+        "multiplier_type": "none", "band_points": {}, "is_default": False
+    },
 }
 
-DEFAULT_CFG = {"call": "YO8ACR", "loc": "KN37", "jud": "NT", "addr": "", "cat": 0, "fs": 11, "contest": "simplu", "county": "NT", "lang": "ro", "manual_dt": False, "sounds": True, "op_name": "", "power": "100", "win_geo": ""}
+DEFAULT_CFG = {
+    "call": "YO8ACR", "loc": "KN37", "jud": "NT", "addr": "",
+    "cat": 0, "fs": 11, "contest": "simplu", "county": "NT",
+    "lang": "ro", "manual_dt": False, "sounds": True,
+    "op_name": "", "power": "100", "win_geo": ""
+}
 
-TH = {"bg": "#0d1117", "fg": "#e6edf3", "accent": "#1f6feb", "entry_bg": "#161b22", "header_bg": "#010409", "btn_bg": "#21262d", "btn_fg": "#f0f6fc", "led_on": "#3fb950", "led_off": "#f85149", "warn": "#d29922", "ok": "#3fb950", "err": "#f85149", "dup_bg": "#3d1a1a", "mult_bg": "#1a3d1a", "spec_bg": "#1a1a3d", "alt": "#0d1f2d", "gold": "#ffd700", "cyan": "#58a6ff"}
+TH = {
+    "bg": "#0d1117", "fg": "#e6edf3", "accent": "#1f6feb",
+    "entry_bg": "#161b22", "header_bg": "#010409",
+    "btn_bg": "#21262d", "btn_fg": "#f0f6fc",
+    "led_on": "#3fb950", "led_off": "#f85149",
+    "warn": "#d29922", "ok": "#3fb950", "err": "#f85149",
+    "dup_bg": "#3d1a1a", "mult_bg": "#1a3d1a", "spec_bg": "#1a1a3d",
+    "alt": "#0d1f2d", "gold": "#ffd700", "cyan": "#58a6ff"
+}
 
 
+# ─── Data Manager ─────────────────────────────────────────────────────────────
 class DM:
     @staticmethod
     def fp(fn):
@@ -325,10 +473,10 @@ class DM:
                 os.remove(p)
             os.rename(t, p)
             return True
-        except:
+        except Exception:
             try:
                 os.remove(t)
-            except:
+            except Exception:
                 pass
             return False
 
@@ -342,7 +490,7 @@ class DM:
         try:
             with open(p, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except:
+        except Exception:
             return copy.deepcopy(default) if default else {}
 
     @staticmethod
@@ -372,17 +520,18 @@ class DM:
                 bks[0].unlink()
                 bks.pop(0)
             return True
-        except:
+        except Exception:
             return False
 
 
+# ─── Language ─────────────────────────────────────────────────────────────────
 class L:
     _c = "ro"
 
     @classmethod
-    def s(cls, l):
-        if l in T:
-            cls._c = l
+    def s(cls, lang):
+        if lang in T:
+            cls._c = lang
 
     @classmethod
     def g(cls):
@@ -393,6 +542,7 @@ class L:
         return T.get(cls._c, {}).get(k, k)
 
 
+# ─── Score Engine ─────────────────────────────────────────────────────────────
 class Score:
     @staticmethod
     def qso(q, rules, cfg=None):
@@ -406,13 +556,16 @@ class Score:
         if call in sp:
             try:
                 return int(sp[call])
-            except:
+            except Exception:
                 pass
         if sm == "per_qso":
             return rules.get("points_per_qso", 1)
         elif sm == "per_band":
             bp = rules.get("band_points", {})
             return int(bp.get(q.get("b", ""), rules.get("points_per_qso", 1)))
+        elif sm == "maraton":
+            sp2 = rules.get("special_scoring", {})
+            return int(sp2.get(call, rules.get("points_per_qso", 1)))
         elif sm == "distance":
             n = q.get("n", "").strip()
             ml = (cfg or {}).get("loc", "")
@@ -441,7 +594,7 @@ class Score:
                 ms.add(b)
             elif mt == "grid":
                 if len(n) >= 4 and Loc.valid(n[:4]):
-                    ms.add(n[:4])
+                    ms.add(n[:4].upper())
         return max(1, len(ms)), ms
 
     @staticmethod
@@ -462,9 +615,20 @@ class Score:
         for i, q in enumerate(data):
             if edit_idx is not None and i == edit_idx:
                 continue
-            if q.get("c", "").upper() == cu and q.get("b") == band and q.get("m") == mode:
+            if (q.get("c", "").upper() == cu
+                    and q.get("b") == band and q.get("m") == mode):
                 return True, i
         return False, -1
+
+    @staticmethod
+    def worked_other(data, call, band, mode):
+        """Returns True if call was worked on a different band or mode."""
+        cu = call.upper()
+        for q in data:
+            if q.get("c", "").upper() == cu:
+                if q.get("b") != band or q.get("m") != mode:
+                    return True
+        return False
 
     @staticmethod
     def is_new_mult(data, qso, rules):
@@ -486,7 +650,7 @@ class Score:
             nm = qso.get("b", "")
         elif mt == "grid":
             if len(n) >= 4 and Loc.valid(n[:4]):
-                nm = n[:4]
+                nm = n[:4].upper()
         return nm is not None and nm not in ex
 
     @staticmethod
@@ -496,9 +660,11 @@ class Score:
         if not rules:
             return True, f"OK: {len(data)} QSO", len(data)
         msgs = []
+        # Min QSO check
         mq = rules.get("min_qso", 0)
         if mq > 0 and len(data) < mq:
-            msgs.append(f"Min {mq} QSO, aveți {len(data)}")
+            msgs.append(f"⚠ Min {mq} QSO, aveți/you have {len(data)}")
+        # Duplicate check
         seen = set()
         dc = 0
         for q in data:
@@ -507,13 +673,32 @@ class Score:
                 dc += 1
             seen.add(k)
         if dc:
-            msgs.append(f"⚠ {dc} duplicate")
+            msgs.append(f"⚠ {dc} duplicate(s)")
+        # Required stations check
+        req = rules.get("required_stations", [])
+        if req:
+            calls_in_log = {q.get("c", "").upper() for q in data}
+            missing = [r for r in req if r.upper() not in calls_in_log]
+            if missing:
+                msgs.append(f"⚠ Stații lipsă / Missing: {', '.join(missing)}")
+        # Forbidden bands/modes check
+        ab = rules.get("allowed_bands", [])
+        am = rules.get("allowed_modes", [])
+        if ab:
+            bad_b = [q.get("c") for q in data if q.get("b") not in ab]
+            if bad_b:
+                msgs.append(f"⚠ Benzi interzise / Forbidden bands: {len(bad_b)} QSO")
+        if am:
+            bad_m = [q.get("c") for q in data if q.get("m") not in am]
+            if bad_m:
+                msgs.append(f"⚠ Moduri interzise / Forbidden modes: {len(bad_m)} QSO")
         if msgs:
-            return False, "\n".join(msgs[:20]), 0
+            return False, "\n".join(msgs), 0
         _, _, tot = Score.total(data, rules, cfg)
-        return True, f"✓ OK! {len(data)} QSO, Scor: {tot}", tot
+        return True, f"✓ OK! {len(data)} QSO — Scor/Score: {tot}", tot
 
 
+# ─── Importer ─────────────────────────────────────────────────────────────────
 class Importer:
     @staticmethod
     def parse_adif(text):
@@ -527,7 +712,8 @@ class Importer:
             if not rec:
                 continue
             fields = {}
-            for m in re.finditer(r'<(\w+):(\d+)(?::[^>]*)?>(.{0,999}?)', rec, re.IGNORECASE | re.DOTALL):
+            for m in re.finditer(r'<(\w+):(\d+)(?::[^>]*)?>(.{0,9999}?)', rec,
+                                  re.IGNORECASE | re.DOTALL):
                 tag = m.group(1).upper()
                 length = int(m.group(2))
                 val = m.group(3)[:length]
@@ -540,10 +726,23 @@ class Importer:
             q["s"] = fields.get("RST_SENT", "59")
             q["r"] = fields.get("RST_RCVD", "59")
             qd = fields.get("QSO_DATE", "")
-            q["d"] = f"{qd[:4]}-{qd[4:6]}-{qd[6:8]}" if len(qd) == 8 else datetime.datetime.utcnow().strftime("%Y-%m-%d")
+            q["d"] = (f"{qd[:4]}-{qd[4:6]}-{qd[6:8]}"
+                      if len(qd) == 8
+                      else datetime.datetime.utcnow().strftime("%Y-%m-%d"))
             qt = fields.get("TIME_ON", "")
             q["t"] = f"{qt[:2]}:{qt[2:4]}" if len(qt) >= 4 else "00:00"
-            q["f"] = fields.get("FREQ", "")
+            # FREQ: convert MHz to kHz if needed
+            freq_raw = fields.get("FREQ", "")
+            if freq_raw:
+                try:
+                    fv = float(freq_raw)
+                    if fv < 1000:   # MHz → kHz
+                        fv = round(fv * 1000)
+                    q["f"] = str(int(fv))
+                except Exception:
+                    q["f"] = freq_raw
+            else:
+                q["f"] = ""
             q["n"] = fields.get("GRIDSQUARE", fields.get("COMMENT", ""))
             q["ss"] = fields.get("STX", "")
             q["sr"] = fields.get("SRX", "")
@@ -553,23 +752,32 @@ class Importer:
     @staticmethod
     def parse_csv(text):
         qsos = []
-        reader = csv.DictReader(io.StringIO(text))
-        for row in reader:
-            call = (row.get("Call") or row.get("CALL") or row.get("call") or row.get("Callsign") or "").upper().strip()
-            if not call:
-                continue
-            q = {"c": call}
-            q["b"] = row.get("Band") or row.get("BAND") or "40m"
-            q["m"] = row.get("Mode") or row.get("MODE") or "SSB"
-            q["s"] = row.get("RST_Sent") or row.get("RST_S") or "59"
-            q["r"] = row.get("RST_Rcvd") or row.get("RST_R") or "59"
-            q["d"] = row.get("Date") or row.get("DATE") or datetime.datetime.utcnow().strftime("%Y-%m-%d")
-            q["t"] = row.get("Time") or row.get("TIME") or "00:00"
-            q["f"] = row.get("Freq") or row.get("FREQ") or ""
-            q["n"] = row.get("Note") or row.get("NOTE") or row.get("Comment") or ""
-            qsos.append(q)
+        try:
+            reader = csv.DictReader(io.StringIO(text))
+            for row in reader:
+                call = (row.get("Call") or row.get("CALL") or row.get("call")
+                        or row.get("Callsign") or "").upper().strip()
+                if not call:
+                    continue
+                q = {"c": call}
+                q["b"] = row.get("Band") or row.get("BAND") or "40m"
+                q["m"] = row.get("Mode") or row.get("MODE") or "SSB"
+                q["s"] = row.get("RST_Sent") or row.get("RST_S") or "59"
+                q["r"] = row.get("RST_Rcvd") or row.get("RST_R") or "59"
+                q["d"] = (row.get("Date") or row.get("DATE")
+                          or datetime.datetime.utcnow().strftime("%Y-%m-%d"))
+                q["t"] = row.get("Time") or row.get("TIME") or "00:00"
+                q["f"] = row.get("Freq") or row.get("FREQ") or ""
+                q["n"] = row.get("Note") or row.get("NOTE") or row.get("Comment") or ""
+                q["ss"] = row.get("Nr_S") or row.get("SS") or ""
+                q["sr"] = row.get("Nr_R") or row.get("SR") or ""
+                qsos.append(q)
+        except Exception:
+            pass
         return qsos
 
+
+# ─── Contest Editor (full fields, scrollable) ─────────────────────────────────
 class ContestEditor(tk.Toplevel):
     def __init__(self, parent, cid=None, cdata=None, all_c=None):
         super().__init__(parent)
@@ -577,26 +785,56 @@ class ContestEditor(tk.Toplevel):
         self.cid = cid
         self.new = cid is None
         self.all_c = all_c or {}
-        self.d = copy.deepcopy(cdata) if cdata else {"name_ro": "", "name_en": "", "contest_type": "Simplu", "categories": ["Individual"], "scoring_mode": "none", "points_per_qso": 1, "min_qso": 0, "allowed_bands": list(BANDS_ALL), "allowed_modes": list(MODES_ALL), "required_stations": [], "special_scoring": {}, "use_serial": False, "use_county": False, "county_list": [], "multiplier_type": "none", "band_points": {}, "is_default": False}
+        self.d = copy.deepcopy(cdata) if cdata else {
+            "name_ro": "", "name_en": "", "contest_type": "Simplu",
+            "categories": ["Individual"], "scoring_mode": "none",
+            "points_per_qso": 1, "min_qso": 0,
+            "allowed_bands": list(BANDS_ALL), "allowed_modes": list(MODES_ALL),
+            "required_stations": [], "special_scoring": {},
+            "use_serial": False, "use_county": False, "county_list": [],
+            "multiplier_type": "none", "band_points": {}, "is_default": False
+        }
         self.title(L.t("edit_c") if not self.new else L.t("add_c"))
-        self.geometry("700x800")
+        self.geometry("720x820")
         self.configure(bg=TH["bg"])
         self.transient(parent)
         self.grab_set()
         self._build()
 
     def _build(self):
-        f = tk.Frame(self, bg=TH["bg"], padx=15, pady=10)
-        f.pack(fill="both", expand=True)
+        # Scrollable canvas
+        outer = tk.Frame(self, bg=TH["bg"])
+        outer.pack(fill="both", expand=True)
+        canvas = tk.Canvas(outer, bg=TH["bg"], highlightthickness=0)
+        vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+        vsb.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        self._inner = tk.Frame(canvas, bg=TH["bg"], padx=15, pady=10)
+        win_id = canvas.create_window((0, 0), window=self._inner, anchor="nw")
+
+        def _on_frame_configure(e):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def _on_canvas_configure(e):
+            canvas.itemconfig(win_id, width=e.width)
+
+        self._inner.bind("<Configure>", _on_frame_configure)
+        canvas.bind("<Configure>", _on_canvas_configure)
+        canvas.bind("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
+
         eo = {"bg": TH["entry_bg"], "fg": TH["fg"], "font": ("Consolas", 11), "insertbackground": TH["fg"]}
         lo = {"bg": TH["bg"], "fg": TH["fg"], "font": ("Consolas", 11)}
+        f = self._inner
         r = 0
         self._e = {}
+
         if self.new:
             tk.Label(f, text=L.t("c_id"), **lo).grid(row=r, column=0, sticky="w", pady=3)
             self._e["id"] = tk.Entry(f, width=30, **eo)
             self._e["id"].grid(row=r, column=1, sticky="w", pady=3)
             r += 1
+
         for k, lb in [("name_ro", L.t("c_name") + " (RO)"), ("name_en", L.t("c_name") + " (EN)")]:
             tk.Label(f, text=lb, **lo).grid(row=r, column=0, sticky="w", pady=3)
             e = tk.Entry(f, width=40, **eo)
@@ -604,14 +842,19 @@ class ContestEditor(tk.Toplevel):
             e.grid(row=r, column=1, sticky="w", pady=3)
             self._e[k] = e
             r += 1
+
         tk.Label(f, text=L.t("c_type"), **lo).grid(row=r, column=0, sticky="w", pady=3)
         self._tv = tk.StringVar(value=self.d.get("contest_type", "Simplu"))
-        ttk.Combobox(f, textvariable=self._tv, values=CONTEST_TYPES, state="readonly", width=18).grid(row=r, column=1, sticky="w", pady=3)
+        ttk.Combobox(f, textvariable=self._tv, values=CONTEST_TYPES,
+                     state="readonly", width=18).grid(row=r, column=1, sticky="w", pady=3)
         r += 1
+
         tk.Label(f, text=L.t("sc_mode"), **lo).grid(row=r, column=0, sticky="w", pady=3)
         self._sv = tk.StringVar(value=self.d.get("scoring_mode", "none"))
-        ttk.Combobox(f, textvariable=self._sv, values=SCORING_MODES, state="readonly", width=18).grid(row=r, column=1, sticky="w", pady=3)
+        ttk.Combobox(f, textvariable=self._sv, values=SCORING_MODES,
+                     state="readonly", width=18).grid(row=r, column=1, sticky="w", pady=3)
         r += 1
+
         for k, lb in [("points_per_qso", L.t("ppq")), ("min_qso", L.t("min_qso"))]:
             tk.Label(f, text=lb, **lo).grid(row=r, column=0, sticky="w", pady=3)
             e = tk.Entry(f, width=10, **eo)
@@ -619,55 +862,181 @@ class ContestEditor(tk.Toplevel):
             e.grid(row=r, column=1, sticky="w", pady=3)
             self._e[k] = e
             r += 1
+
         tk.Label(f, text=L.t("mults"), **lo).grid(row=r, column=0, sticky="w", pady=3)
         self._mv = tk.StringVar(value=self.d.get("multiplier_type", "none"))
-        ttk.Combobox(f, textvariable=self._mv, values=["none", "county", "dxcc", "band", "grid"], state="readonly", width=18).grid(row=r, column=1, sticky="w", pady=3)
+        ttk.Combobox(f, textvariable=self._mv, values=["none", "county", "dxcc", "band", "grid"],
+                     state="readonly", width=18).grid(row=r, column=1, sticky="w", pady=3)
         r += 1
+
         self._serv = tk.BooleanVar(value=self.d.get("use_serial", False))
-        tk.Checkbutton(f, text=L.t("use_serial"), variable=self._serv, bg=TH["bg"], fg=TH["fg"], selectcolor=TH["entry_bg"]).grid(row=r, column=0, columnspan=2, sticky="w", pady=3)
+        tk.Checkbutton(f, text=L.t("use_serial"), variable=self._serv,
+                       bg=TH["bg"], fg=TH["fg"], selectcolor=TH["entry_bg"],
+                       activebackground=TH["bg"]).grid(row=r, column=0, columnspan=2, sticky="w", pady=3)
         r += 1
+
         self._couv = tk.BooleanVar(value=self.d.get("use_county", False))
-        tk.Checkbutton(f, text=L.t("use_county"), variable=self._couv, bg=TH["bg"], fg=TH["fg"], selectcolor=TH["entry_bg"]).grid(row=r, column=0, columnspan=2, sticky="w", pady=3)
+        tk.Checkbutton(f, text=L.t("use_county"), variable=self._couv,
+                       bg=TH["bg"], fg=TH["fg"], selectcolor=TH["entry_bg"],
+                       activebackground=TH["bg"]).grid(row=r, column=0, columnspan=2, sticky="w", pady=3)
         r += 1
+
+        # Categories (text area)
+        tk.Label(f, text=L.t("cats"), **lo).grid(row=r, column=0, sticky="nw", pady=3)
+        self._cats_t = tk.Text(f, width=38, height=4, **eo)
+        self._cats_t.insert("1.0", "\n".join(self.d.get("categories", [])))
+        self._cats_t.grid(row=r, column=1, sticky="w", pady=3)
+        r += 1
+
+        # Allowed Bands (checkboxes)
+        tk.Label(f, text=L.t("a_bands"), **lo).grid(row=r, column=0, sticky="nw", pady=3)
         bf = tk.Frame(f, bg=TH["bg"])
-        bf.grid(row=r, column=0, columnspan=2, pady=15)
-        tk.Button(bf, text=L.t("save"), command=self._save, bg=TH["accent"], fg="white", font=("Consolas", 12, "bold"), width=12).pack(side="left", padx=8)
-        tk.Button(bf, text=L.t("cancel"), command=self.destroy, bg=TH["btn_bg"], fg="white", font=("Consolas", 12), width=12).pack(side="left", padx=8)
+        bf.grid(row=r, column=1, sticky="w", pady=3)
+        ab_set = set(self.d.get("allowed_bands", BANDS_ALL))
+        self._band_vars = {}
+        for i, b in enumerate(BANDS_ALL):
+            v = tk.BooleanVar(value=b in ab_set)
+            self._band_vars[b] = v
+            tk.Checkbutton(bf, text=b, variable=v, bg=TH["bg"], fg=TH["fg"],
+                           selectcolor=TH["entry_bg"], activebackground=TH["bg"],
+                           font=("Consolas", 9)).grid(row=i // 7, column=i % 7, sticky="w")
+        r += 1
+
+        # Allowed Modes (checkboxes)
+        tk.Label(f, text=L.t("a_modes"), **lo).grid(row=r, column=0, sticky="nw", pady=3)
+        mf = tk.Frame(f, bg=TH["bg"])
+        mf.grid(row=r, column=1, sticky="w", pady=3)
+        am_set = set(self.d.get("allowed_modes", MODES_ALL))
+        self._mode_vars = {}
+        for i, m in enumerate(MODES_ALL):
+            v = tk.BooleanVar(value=m in am_set)
+            self._mode_vars[m] = v
+            tk.Checkbutton(mf, text=m, variable=v, bg=TH["bg"], fg=TH["fg"],
+                           selectcolor=TH["entry_bg"], activebackground=TH["bg"],
+                           font=("Consolas", 9)).grid(row=i // 4, column=i % 4, sticky="w")
+        r += 1
+
+        # Required stations
+        tk.Label(f, text=L.t("req_st_c"), **lo).grid(row=r, column=0, sticky="nw", pady=3)
+        self._req_t = tk.Text(f, width=38, height=4, **eo)
+        self._req_t.insert("1.0", "\n".join(self.d.get("required_stations", [])))
+        self._req_t.grid(row=r, column=1, sticky="w", pady=3)
+        r += 1
+
+        # Special scoring
+        tk.Label(f, text=L.t("sp_sc"), **lo).grid(row=r, column=0, sticky="nw", pady=3)
+        self._sp_t = tk.Text(f, width=38, height=3, **eo)
+        sp_lines = [f"{k}={v}" for k, v in self.d.get("special_scoring", {}).items()]
+        self._sp_t.insert("1.0", "\n".join(sp_lines))
+        self._sp_t.grid(row=r, column=1, sticky="w", pady=3)
+        r += 1
+
+        # Band points
+        tk.Label(f, text=L.t("band_pts"), **lo).grid(row=r, column=0, sticky="nw", pady=3)
+        self._bp_t = tk.Text(f, width=38, height=3, **eo)
+        bp_lines = [f"{k}={v}" for k, v in self.d.get("band_points", {}).items()]
+        self._bp_t.insert("1.0", "\n".join(bp_lines))
+        self._bp_t.grid(row=r, column=1, sticky="w", pady=3)
+        r += 1
+
+        # County list
+        tk.Label(f, text=L.t("county_list"), **lo).grid(row=r, column=0, sticky="w", pady=3)
+        self._cl_e = tk.Entry(f, width=50, **eo)
+        self._cl_e.insert(0, ",".join(self.d.get("county_list", [])))
+        self._cl_e.grid(row=r, column=1, sticky="w", pady=3)
+        r += 1
+
+        # Buttons
+        bf2 = tk.Frame(f, bg=TH["bg"])
+        bf2.grid(row=r, column=0, columnspan=2, pady=18)
+        tk.Button(bf2, text=L.t("save"), command=self._save,
+                  bg=TH["accent"], fg="white", font=("Consolas", 12, "bold"), width=12).pack(side="left", padx=8)
+        tk.Button(bf2, text=L.t("cancel"), command=self.destroy,
+                  bg=TH["btn_bg"], fg="white", font=("Consolas", 12), width=12).pack(side="left", padx=8)
+
+    @staticmethod
+    def _parse_kv(text):
+        """Parse KEY=VALUE lines into dict."""
+        result = {}
+        for line in text.strip().splitlines():
+            line = line.strip()
+            if "=" in line:
+                k, _, v = line.partition("=")
+                k = k.strip().upper()
+                v = v.strip()
+                if k:
+                    result[k] = v
+        return result
 
     def _save(self):
         if self.new:
             cid = self._e["id"].get().strip().lower().replace(" ", "-")
-            if not cid or cid in self.all_c:
-                messagebox.showerror(L.t("error"), L.t("c_exists") if cid in self.all_c else "ID!")
+            if not cid:
+                messagebox.showerror(L.t("error"), "ID invalid!")
+                return
+            if cid in self.all_c:
+                messagebox.showerror(L.t("error"), L.t("c_exists"))
                 return
             self.cid = cid
+
         self.d["name_ro"] = self._e["name_ro"].get().strip()
         self.d["name_en"] = self._e["name_en"].get().strip()
         self.d["contest_type"] = self._tv.get()
         self.d["scoring_mode"] = self._sv.get()
         try:
             self.d["points_per_qso"] = int(self._e["points_per_qso"].get())
-        except:
+        except Exception:
             self.d["points_per_qso"] = 1
         try:
             self.d["min_qso"] = int(self._e["min_qso"].get())
-        except:
+        except Exception:
             self.d["min_qso"] = 0
         self.d["multiplier_type"] = self._mv.get()
         self.d["use_serial"] = self._serv.get()
         self.d["use_county"] = self._couv.get()
+
+        # Categories
+        cats = [c.strip() for c in self._cats_t.get("1.0", "end").splitlines() if c.strip()]
+        self.d["categories"] = cats if cats else ["Individual"]
+
+        # Bands / Modes
+        self.d["allowed_bands"] = [b for b, v in self._band_vars.items() if v.get()]
+        self.d["allowed_modes"] = [m for m, v in self._mode_vars.items() if v.get()]
+        if not self.d["allowed_bands"]:
+            self.d["allowed_bands"] = list(BANDS_ALL)
+        if not self.d["allowed_modes"]:
+            self.d["allowed_modes"] = list(MODES_ALL)
+
+        # Required stations
+        req = [s.strip().upper() for s in self._req_t.get("1.0", "end").splitlines() if s.strip()]
+        self.d["required_stations"] = req
+
+        # Special scoring
+        self.d["special_scoring"] = self._parse_kv(self._sp_t.get("1.0", "end"))
+
+        # Band points
+        raw_bp = self._parse_kv(self._bp_t.get("1.0", "end"))
+        self.d["band_points"] = {k: int(v) for k, v in raw_bp.items()
+                                  if v.isdigit()}
+
+        # County list
+        cl_raw = self._cl_e.get().strip()
+        self.d["county_list"] = [c.strip().upper() for c in cl_raw.split(",")
+                                   if c.strip()] if cl_raw else []
+
         self.d["is_default"] = False
         self.result = (self.cid, self.d)
         self.destroy()
 
 
+# ─── Contest Manager ──────────────────────────────────────────────────────────
 class ContestMgr(tk.Toplevel):
     def __init__(self, parent, contests):
         super().__init__(parent)
         self.c = copy.deepcopy(contests)
         self.result = None
         self.title(L.t("contest_mgr"))
-        self.geometry("700x450")
+        self.geometry("750x500")
         self.configure(bg=TH["bg"])
         self.transient(parent)
         self.grab_set()
@@ -675,30 +1044,51 @@ class ContestMgr(tk.Toplevel):
         self._fill()
 
     def _build(self):
-        tb = tk.Frame(self, bg=TH["header_bg"], pady=5)
+        tb = tk.Frame(self, bg=TH["header_bg"], pady=6)
         tb.pack(fill="x")
-        for txt, cmd in [(L.t("add_c"), self._add), (L.t("edit_c"), self._edit), (L.t("del_c"), self._del)]:
-            tk.Button(tb, text=txt, command=cmd, bg=TH["accent"], fg="white", font=("Consolas", 10)).pack(side="left", padx=3)
+        for txt, cmd in [
+            (L.t("add_c"), self._add),
+            (L.t("edit_c"), self._edit),
+            (L.t("dup_c"), self._dup),
+            (L.t("del_c"), self._del),
+            (L.t("exp_c"), self._export),
+            (L.t("imp_c"), self._import),
+        ]:
+            tk.Button(tb, text=txt, command=cmd,
+                      bg=TH["accent"], fg="white", font=("Consolas", 10)).pack(side="left", padx=3)
+
         tf = tk.Frame(self, bg=TH["bg"])
         tf.pack(fill="both", expand=True, padx=6, pady=3)
-        cols = ("id", "name", "type", "sc")
+        cols = ("id", "name", "type", "sc", "mult", "minq")
         self.tree = ttk.Treeview(tf, columns=cols, show="headings", selectmode="browse")
-        for c, h, w in zip(cols, ["ID", L.t("c_name"), L.t("c_type"), L.t("sc_mode")], [100, 200, 100, 100]):
+        for c, h, w in zip(cols,
+                           ["ID", L.t("c_name"), L.t("c_type"), L.t("sc_mode"), L.t("mults"), L.t("min_qso")],
+                           [110, 200, 90, 90, 70, 60]):
             self.tree.heading(c, text=h)
             self.tree.column(c, width=w, anchor="center")
-        self.tree.pack(fill="both", expand=True)
+        sb = ttk.Scrollbar(tf, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=sb.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
         self.tree.bind("<Double-1>", lambda e: self._edit())
+
         bt = tk.Frame(self, bg=TH["bg"], pady=6)
         bt.pack(fill="x")
-        tk.Button(bt, text=L.t("save"), command=self._onsave, bg=TH["ok"], fg="white", font=("Consolas", 12, "bold"), width=12).pack(side="left", padx=12)
-        tk.Button(bt, text=L.t("cancel"), command=self.destroy, bg=TH["btn_bg"], fg="white", font=("Consolas", 12), width=12).pack(side="right", padx=12)
+        tk.Button(bt, text=L.t("save"), command=self._onsave,
+                  bg=TH["ok"], fg="white", font=("Consolas", 12, "bold"), width=12).pack(side="left", padx=12)
+        tk.Button(bt, text=L.t("cancel"), command=self.destroy,
+                  bg=TH["btn_bg"], fg="white", font=("Consolas", 12), width=12).pack(side="right", padx=12)
 
     def _fill(self):
         for i in self.tree.get_children():
             self.tree.delete(i)
         for cid, cd in self.c.items():
             nm = cd.get("name_" + L.g(), cd.get("name_ro", cid))
-            self.tree.insert("", "end", iid=cid, values=(cid, nm, cd.get("contest_type", "?"), cd.get("scoring_mode", "none")))
+            self.tree.insert("", "end", iid=cid,
+                             values=(cid, nm, cd.get("contest_type", "?"),
+                                     cd.get("scoring_mode", "none"),
+                                     cd.get("multiplier_type", "none"),
+                                     cd.get("min_qso", 0)))
 
     def _sel(self):
         s = self.tree.selection()
@@ -714,6 +1104,7 @@ class ContestMgr(tk.Toplevel):
     def _edit(self):
         cid = self._sel()
         if not cid:
+            messagebox.showwarning("", L.t("no_sel"))
             return
         d = ContestEditor(self, cid=cid, cdata=self.c[cid], all_c=self.c)
         self.wait_window(d)
@@ -721,24 +1112,326 @@ class ContestMgr(tk.Toplevel):
             self.c[cid] = d.result[1]
             self._fill()
 
+    def _dup(self):
+        cid = self._sel()
+        if not cid:
+            messagebox.showwarning("", L.t("no_sel"))
+            return
+        new_cid = cid + "-copy"
+        i = 2
+        while new_cid in self.c:
+            new_cid = f"{cid}-copy{i}"
+            i += 1
+        self.c[new_cid] = copy.deepcopy(self.c[cid])
+        self.c[new_cid]["is_default"] = False
+        self.c[new_cid]["name_ro"] = self.c[new_cid].get("name_ro", cid) + " (copie)"
+        self.c[new_cid]["name_en"] = self.c[new_cid].get("name_en", cid) + " (copy)"
+        self._fill()
+
     def _del(self):
         cid = self._sel()
-        if cid and not self.c.get(cid, {}).get("is_default") and messagebox.askyesno(L.t("confirm_del"), L.t("del_c_conf").format(cid)):
+        if not cid:
+            messagebox.showwarning("", L.t("no_sel"))
+            return
+        if self.c.get(cid, {}).get("is_default"):
+            messagebox.showwarning("", L.t("c_default"))
+            return
+        if messagebox.askyesno(L.t("confirm_del"), L.t("del_c_conf").format(cid)):
             del self.c[cid]
             self._fill()
+
+    def _export(self):
+        fp = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON", "*.json")],
+            initialfile=f"contests_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.json"
+        )
+        if fp:
+            try:
+                with open(fp, "w", encoding="utf-8") as f:
+                    json.dump(self.c, f, indent=2, ensure_ascii=False)
+                messagebox.showinfo(L.t("exp_ok"), f"→ {os.path.basename(fp)}")
+            except Exception as e:
+                messagebox.showerror(L.t("error"), str(e))
+
+    def _import(self):
+        fp = filedialog.askopenfilename(filetypes=[("JSON", "*.json")])
+        if fp:
+            try:
+                with open(fp, "r", encoding="utf-8") as f:
+                    imported = json.load(f)
+                if isinstance(imported, dict):
+                    added = 0
+                    for cid, cd in imported.items():
+                        if cid not in self.c:
+                            self.c[cid] = cd
+                            added += 1
+                    self._fill()
+                    messagebox.showinfo("OK", f"Importate / Imported: {added}")
+                else:
+                    messagebox.showerror(L.t("error"), "Format invalid!")
+            except Exception as e:
+                messagebox.showerror(L.t("error"), str(e))
 
     def _onsave(self):
         self.result = self.c
         self.destroy()
 
 
+# ─── Search Dialog ────────────────────────────────────────────────────────────
+class SearchDialog(tk.Toplevel):
+    def __init__(self, parent, log_data):
+        super().__init__(parent)
+        self.log_data = log_data
+        self.title(L.t("search_t"))
+        self.geometry("600x420")
+        self.configure(bg=TH["bg"])
+        self.transient(parent)
+        eo = {"bg": TH["entry_bg"], "fg": TH["fg"], "font": ("Consolas", 11),
+               "insertbackground": TH["fg"]}
+        tk.Label(self, text=L.t("search_l"), bg=TH["bg"], fg=TH["fg"],
+                 font=("Consolas", 11)).pack(anchor="w", padx=10, pady=(10, 0))
+        self._sv = tk.StringVar()
+        e = tk.Entry(self, textvariable=self._sv, width=40, **eo)
+        e.pack(padx=10, pady=4, anchor="w")
+        e.bind("<KeyRelease>", self._search)
+        e.focus()
+        self._lbl = tk.Label(self, text="", bg=TH["bg"], fg=TH["fg"], font=("Consolas", 9))
+        self._lbl.pack(anchor="w", padx=10)
+        tf = tk.Frame(self, bg=TH["bg"])
+        tf.pack(fill="both", expand=True, padx=10, pady=4)
+        cols = ("nr", "call", "band", "mode", "date", "note")
+        self.tree = ttk.Treeview(tf, columns=cols, show="headings", selectmode="browse")
+        for c, h, w in zip(cols, [L.t("nr"), L.t("call"), L.t("band"), L.t("mode"),
+                                   L.t("data"), L.t("note")],
+                           [40, 110, 55, 55, 85, 180]):
+            self.tree.heading(c, text=h)
+            self.tree.column(c, width=w, anchor="center")
+        sb = ttk.Scrollbar(tf, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=sb.set)
+        self.tree.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+        tk.Button(self, text=L.t("close"), command=self.destroy,
+                  bg=TH["btn_bg"], fg="white").pack(pady=8)
+
+    def _search(self, e=None):
+        q_str = self._sv.get().upper().strip()
+        for i in self.tree.get_children():
+            self.tree.delete(i)
+        if not q_str:
+            self._lbl.config(text="")
+            return
+        results = []
+        for i, q in enumerate(self.log_data):
+            if (q_str in q.get("c", "").upper()
+                    or q_str in q.get("n", "").upper()):
+                results.append((len(self.log_data) - i, q))
+        self._lbl.config(text=f"{L.t('results')}: {len(results)}")
+        for nr, q in results:
+            self.tree.insert("", "end",
+                             values=(nr, q.get("c"), q.get("b"), q.get("m"),
+                                     q.get("d"), q.get("n")))
+
+
+# ─── Timer Dialog ─────────────────────────────────────────────────────────────
+class TimerDialog(tk.Toplevel):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.title(L.t("timer_t"))
+        self.geometry("300x220")
+        self.configure(bg=TH["bg"])
+        self.transient(parent)
+        self._running = False
+        self._end_time = None
+        self._duration = 0
+        self._elapsed_start = None
+        self._elapsed_secs = 0
+        lo = {"bg": TH["bg"], "fg": TH["fg"], "font": ("Consolas", 11)}
+        tk.Label(self, text=L.t("dur_h"), **lo).pack(pady=(15, 0))
+        eo = {"bg": TH["entry_bg"], "fg": TH["fg"], "font": ("Consolas", 11),
+               "justify": "center", "insertbackground": TH["fg"]}
+        self._dur_e = tk.Entry(self, width=10, **eo)
+        self._dur_e.insert(0, "4")
+        self._dur_e.pack(pady=4)
+        self._time_lbl = tk.Label(self, text="00:00:00",
+                                   bg=TH["bg"], fg=TH["gold"], font=("Consolas", 28, "bold"))
+        self._time_lbl.pack(pady=10)
+        self._rem_lbl = tk.Label(self, text="", **lo)
+        self._rem_lbl.pack()
+        bf = tk.Frame(self, bg=TH["bg"])
+        bf.pack(pady=8)
+        self._start_btn = tk.Button(bf, text=L.t("timer_start"), command=self._start,
+                                     bg=TH["ok"], fg="white", font=("Consolas", 11), width=8)
+        self._start_btn.pack(side="left", padx=4)
+        tk.Button(bf, text=L.t("timer_reset"), command=self._reset,
+                  bg=TH["warn"], fg="white", font=("Consolas", 11), width=8).pack(side="left", padx=4)
+        self._tick()
+
+    def _start(self):
+        if self._running:
+            self._running = False
+            self._start_btn.config(text=L.t("timer_start"), bg=TH["ok"])
+        else:
+            try:
+                h = float(self._dur_e.get())
+                self._duration = int(h * 3600)
+            except Exception:
+                self._duration = 0
+            self._running = True
+            self._elapsed_start = datetime.datetime.utcnow()
+            if self._duration > 0:
+                self._end_time = self._elapsed_start + datetime.timedelta(seconds=self._duration)
+            self._start_btn.config(text=L.t("timer_stop"), bg=TH["err"])
+
+    def _reset(self):
+        self._running = False
+        self._elapsed_secs = 0
+        self._end_time = None
+        self._elapsed_start = None
+        self._time_lbl.config(text="00:00:00", fg=TH["gold"])
+        self._rem_lbl.config(text="")
+        self._start_btn.config(text=L.t("timer_start"), bg=TH["ok"])
+
+    def _tick(self):
+        if self._running and self._elapsed_start:
+            now = datetime.datetime.utcnow()
+            elapsed = int((now - self._elapsed_start).total_seconds()) + self._elapsed_secs
+            h, rem = divmod(elapsed, 3600)
+            m, s = divmod(rem, 60)
+            self._time_lbl.config(text=f"{h:02d}:{m:02d}:{s:02d}")
+            if self._end_time:
+                remaining = int((self._end_time - now).total_seconds())
+                if remaining <= 0:
+                    self._running = False
+                    self._time_lbl.config(fg=TH["err"])
+                    self._rem_lbl.config(text="⏰ TIMP EXPIRAT / TIME UP!", fg=TH["err"])
+                    beep("error")
+                else:
+                    rh, rrem = divmod(remaining, 3600)
+                    rm, rs = divmod(rrem, 60)
+                    self._rem_lbl.config(
+                        text=f"{L.t('remaining')} {rh:02d}:{rm:02d}:{rs:02d}",
+                        fg=TH["warn"] if remaining < 300 else TH["fg"])
+        try:
+            self.after(1000, self._tick)
+        except Exception:
+            pass
+
+
+# ─── Stats Window ─────────────────────────────────────────────────────────────
+class StatsWindow(tk.Toplevel):
+    def __init__(self, parent, log_data, rules, cfg):
+        super().__init__(parent)
+        self.title(L.t("stats"))
+        self.geometry("560x520")
+        self.configure(bg=TH["bg"])
+        self.transient(parent)
+        txt = scrolledtext.ScrolledText(self, bg=TH["entry_bg"], fg=TH["fg"],
+                                         font=("Consolas", 10), wrap="word")
+        txt.pack(fill="both", expand=True, padx=10, pady=10)
+        txt.tag_configure("h", foreground=TH["gold"], font=("Consolas", 11, "bold"))
+        txt.tag_configure("ok", foreground=TH["ok"])
+        txt.tag_configure("err", foreground=TH["err"])
+        txt.tag_configure("warn", foreground=TH["warn"])
+
+        def w(text, tag=None):
+            txt.insert("end", text, tag)
+
+        nm = rules.get("name_" + L.g(), rules.get("name_ro", "?")) if rules else "?"
+        w(f"📊 {L.t('stats')} — {nm}\n\n", "h")
+        w(f"Total QSO: {len(log_data)}\n")
+        unique = len({q.get("c", "").upper() for q in log_data})
+        w(f"Unice / Unique: {unique}\n")
+
+        if log_data:
+            # Operating time
+            try:
+                dts = []
+                for q in log_data:
+                    try:
+                        dts.append(datetime.datetime.strptime(
+                            q.get("d", "") + " " + q.get("t", ""), "%Y-%m-%d %H:%M"))
+                    except Exception:
+                        pass
+                if len(dts) >= 2:
+                    dts.sort()
+                    span = dts[-1] - dts[0]
+                    span_h = span.total_seconds() / 3600
+                    rate = len(log_data) / span_h if span_h > 0 else 0
+                    w(f"Primul QSO / First: {dts[0].strftime('%Y-%m-%d %H:%M')}\n")
+                    w(f"Ultimul QSO / Last:  {dts[-1].strftime('%Y-%m-%d %H:%M')}\n")
+                    w(f"Durata / Duration: {span_h:.1f}h  |  Rată / Rate: {rate:.1f} QSO/h\n")
+            except Exception:
+                pass
+
+        w("\n")
+        # Band summary
+        w("─── Benzi / Bands ───\n", "h")
+        bc = Counter(q.get("b", "?") for q in log_data)
+        for b in BANDS_ALL:
+            if b in bc:
+                pts = sum(Score.qso(q, rules, cfg) for q in log_data if q.get("b") == b)
+                uni = len({q.get("c", "").upper() for q in log_data if q.get("b") == b})
+                w(f"  {b:<6} QSO:{bc[b]:<5} Unice:{uni:<5} Pts:{pts}\n")
+
+        w("\n─── Moduri / Modes ───\n", "h")
+        mc = Counter(q.get("m", "?") for q in log_data)
+        for m, cnt in mc.most_common():
+            w(f"  {m:<8} {cnt}\n")
+
+        w("\n─── Scor / Score ───\n", "h")
+        if rules and rules.get("scoring_mode", "none") != "none":
+            qp, mult, tot = Score.total(log_data, rules, cfg)
+            w(f"  Puncte QSO: {qp}\n")
+            w(f"  Multiplicatori: {mult}\n")
+            w(f"  TOTAL: {qp} × {mult} = {tot}\n", "ok")
+        else:
+            w("  (fără punctare / no scoring)\n", "warn")
+
+        # Required stations
+        req = (rules or {}).get("required_stations", [])
+        if req:
+            w("\n─── Stații Obligatorii / Required ───\n", "h")
+            calls_in_log = {q.get("c", "").upper() for q in log_data}
+            for r in req:
+                found = r.upper() in calls_in_log
+                w(f"  {'✓' if found else '✗'} {r}\n", "ok" if found else "err")
+
+        # Worked-All tracker
+        mt = (rules or {}).get("multiplier_type", "none")
+        if mt == "county":
+            all_co = (rules or {}).get("county_list", YO_COUNTIES)
+            _, worked = Score.mults(log_data, rules)
+            missing = [c for c in all_co if c.upper() not in worked]
+            w(f"\n─── Județe / Counties ───\n", "h")
+            w(L.t("worked_x").format(len(worked), len(all_co)) + "\n", "ok")
+            if missing:
+                w(L.t("missing_x").format(", ".join(sorted(missing))) + "\n", "warn")
+        elif mt == "dxcc":
+            _, worked = Score.mults(log_data, rules)
+            w(f"\n─── DXCC ({len(worked)}) ───\n", "h")
+            dxcc_names = Counter()
+            for q in log_data:
+                country, _ = DXCC.lookup(q.get("c", ""))
+                dxcc_names[country] += 1
+            for country, cnt in dxcc_names.most_common(25):
+                w(f"  {country:<20} {cnt}\n")
+
+        txt.config(state="disabled")
+        tk.Button(self, text=L.t("close"), command=self.destroy,
+                  bg=TH["btn_bg"], fg="white", font=("Consolas", 10)).pack(pady=6)
+
+
+# ─── Main Application ─────────────────────────────────────────────────────────
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.cfg = DM.load("config.json", DEFAULT_CFG.copy())
         self.contests = DM.load("contests.json", DEFAULT_CONTESTS.copy())
-        if "simplu" not in self.contests:
-            self.contests["simplu"] = DEFAULT_CONTESTS["simplu"]
+        # Ensure defaults exist
+        for k, v in DEFAULT_CONTESTS.items():
+            if k not in self.contests:
+                self.contests[k] = copy.deepcopy(v)
         if self.cfg.get("contest", "") not in self.contests:
             self.cfg["contest"] = "simplu"
         self.log = DM.load_log(self.cfg.get("contest", "simplu"))
@@ -747,6 +1440,7 @@ class App(tk.Tk):
         self.ent = {}
         self.serial = len(self.log) + 1
         self.undo_stack = deque(maxlen=50)
+        # UI references
         self.info_lbl = self.sc_lbl = self.clk = self.rate_lbl = None
         self.led_c = self.led = self.st_lbl = self.wb_lbl = self.log_btn = None
         self.tree = self.ctx = self.fb_v = self.fm_v = None
@@ -761,21 +1455,35 @@ class App(tk.Tk):
         self.bind('<Return>', lambda e: self._add_qso())
         self.bind('<Control-s>', lambda e: self._fsave())
         self.bind('<Control-z>', lambda e: self._undo())
+        self.bind('<Control-f>', lambda e: self._search_dlg())
         self.bind('<F2>', self._cycle_band)
         self.bind('<F3>', self._cycle_mode)
         self._tick_clock()
         self._tick_save()
 
+    # ── helpers ──────────────────────────────────────────────────────────────
     def _cc(self):
-        return self.contests.get(self.cfg.get("contest", "simplu"), self.contests.get("simplu", {}))
+        return self.contests.get(self.cfg.get("contest", "simplu"),
+                                  self.contests.get("simplu", {}))
 
     def _cid(self):
         return self.cfg.get("contest", "simplu")
 
+    def _sounds(self):
+        return self.cfg.get("sounds", True) and HAS_SOUND
+
+    # ── window setup ─────────────────────────────────────────────────────────
     def _setup_win(self):
         self.title(L.t("app_title"))
         self.configure(bg=TH["bg"])
-        self.geometry("1200x750")
+        geo = self.cfg.get("win_geo", "")
+        if geo:
+            try:
+                self.geometry(geo)
+            except Exception:
+                self.geometry("1220x760")
+        else:
+            self.geometry("1220x760")
         self.minsize(1000, 640)
 
     def _setup_style(self):
@@ -785,18 +1493,41 @@ class App(tk.Tk):
         s = ttk.Style()
         try:
             s.theme_use('clam')
-        except:
+        except Exception:
             pass
-        s.configure("Treeview", background=TH["entry_bg"], foreground=TH["fg"], fieldbackground=TH["entry_bg"], font=self.fn, rowheight=22)
-        s.configure("Treeview.Heading", background=TH["header_bg"], foreground=TH["fg"], font=self.fb)
+        s.configure("Treeview", background=TH["entry_bg"], foreground=TH["fg"],
+                     fieldbackground=TH["entry_bg"], font=self.fn, rowheight=22)
+        s.configure("Treeview.Heading", background=TH["header_bg"],
+                     foreground=TH["fg"], font=self.fb)
         s.map("Treeview", background=[("selected", TH["accent"])])
 
+    # ── menu ─────────────────────────────────────────────────────────────────
     def _build_menu(self):
         mb = tk.Menu(self)
         self.config(menu=mb)
+        # Contests menu
         cm = tk.Menu(mb, tearoff=0)
         mb.add_cascade(label=L.t("contests"), menu=cm)
         cm.add_command(label=L.t("contest_mgr"), command=self._mgr)
+        cm.add_separator()
+        for cid, cd in self.contests.items():
+            nm = cd.get("name_" + L.g(), cd.get("name_ro", cid))
+            cm.add_command(label=f"⚡ {nm}",
+                           command=lambda c=cid: self._switch_contest(c))
+        # Tools menu
+        tm = tk.Menu(mb, tearoff=0)
+        mb.add_cascade(label=L.t("tools"), menu=tm)
+        tm.add_command(label=L.t("search"), command=self._search_dlg)
+        tm.add_command(label=L.t("timer"), command=self._timer_dlg)
+        tm.add_separator()
+        tm.add_command(label=L.t("imp_adif"), command=self._import_adif)
+        tm.add_command(label=L.t("imp_csv"), command=self._import_csv)
+        tm.add_separator()
+        tm.add_command(label=L.t("print_log"), command=self._print_log)
+        tm.add_command(label=L.t("verify"), command=self._verify_hash)
+        tm.add_separator()
+        tm.add_command(label=L.t("clear_log"), command=self._clear_log)
+        # Help menu
         hm = tk.Menu(mb, tearoff=0)
         mb.add_cascade(label=L.t("help"), menu=hm)
         hm.add_command(label=L.t("about"), command=self._about)
@@ -807,6 +1538,7 @@ class App(tk.Tk):
         self.ctx.add_command(label=L.t("edit_qso"), command=self._edit_sel)
         self.ctx.add_command(label=L.t("delete_qso"), command=self._del_sel)
 
+    # ── UI build ─────────────────────────────────────────────────────────────
     def _build_ui(self):
         self._build_hdr()
         self._build_inp()
@@ -822,22 +1554,28 @@ class App(tk.Tk):
         self.led_c = tk.Canvas(lf, width=14, height=14, bg=TH["header_bg"], highlightthickness=0)
         self.led = self.led_c.create_oval(1, 1, 13, 13, fill=TH["led_on"], outline="")
         self.led_c.pack(side="left", padx=(0, 5))
-        self.st_lbl = tk.Label(lf, text=L.t("online"), bg=TH["header_bg"], fg=TH["led_on"], font=self.fn)
+        self.st_lbl = tk.Label(lf, text=L.t("online"), bg=TH["header_bg"],
+                                fg=TH["led_on"], font=self.fn)
         self.st_lbl.pack(side="left")
         self.info_lbl = tk.Label(lf, text="", bg=TH["header_bg"], fg=TH["fg"], font=self.fn)
         self.info_lbl.pack(side="left", padx=12)
         rf = tk.Frame(h, bg=TH["header_bg"])
         rf.pack(side="right", padx=10)
-        self.clk = tk.Label(rf, text="UTC 00:00:00", bg=TH["header_bg"], fg=TH["gold"], font=("Consolas", 12, "bold"))
+        self.clk = tk.Label(rf, text="UTC 00:00:00", bg=TH["header_bg"],
+                             fg=TH["gold"], font=("Consolas", 12, "bold"))
         self.clk.pack(side="right", padx=8)
-        self.rate_lbl = tk.Label(rf, text="", bg=TH["header_bg"], fg=TH["ok"], font=("Consolas", 10))
+        self.rate_lbl = tk.Label(rf, text="", bg=TH["header_bg"],
+                                  fg=TH["ok"], font=("Consolas", 10))
         self.rate_lbl.pack(side="right", padx=8)
         self.lang_v = tk.StringVar(value=self.cfg.get("lang", "ro"))
-        lc = ttk.Combobox(rf, textvariable=self.lang_v, values=["ro", "en"], state="readonly", width=4)
+        lc = ttk.Combobox(rf, textvariable=self.lang_v, values=["ro", "en"],
+                           state="readonly", width=4)
         lc.pack(side="right", padx=3)
         lc.bind("<<ComboboxSelected>>", self._on_lang)
         self.cv = tk.StringVar(value=self._cid())
-        self.ccb = ttk.Combobox(rf, textvariable=self.cv, values=list(self.contests.keys()), state="readonly", width=15)
+        self.ccb = ttk.Combobox(rf, textvariable=self.cv,
+                                  values=list(self.contests.keys()),
+                                  state="readonly", width=15)
         self.ccb.pack(side="right", padx=3)
         self.ccb.bind("<<ComboboxSelected>>", self._on_cchange)
         self._upd_info()
@@ -848,83 +1586,119 @@ class App(tk.Tk):
         r1 = tk.Frame(ip, bg=TH["bg"])
         r1.pack(fill="x")
         cc = self._cc()
+        # Callsign
         cf = tk.Frame(r1, bg=TH["bg"])
         cf.pack(side="left", padx=3)
         tk.Label(cf, text=L.t("call"), bg=TH["bg"], fg=TH["fg"], font=self.fb).pack()
-        self.ent["call"] = tk.Entry(cf, width=15, bg=TH["entry_bg"], fg=TH["gold"], font=("Consolas", self.fs + 2, "bold"), insertbackground=TH["fg"], justify="center")
+        self.ent["call"] = tk.Entry(cf, width=15, bg=TH["entry_bg"], fg=TH["gold"],
+                                     font=("Consolas", self.fs + 2, "bold"),
+                                     insertbackground=TH["fg"], justify="center")
         self.ent["call"].pack(ipady=3)
         self.ent["call"].bind("<KeyRelease>", self._on_call_key)
         self.wb_lbl = tk.Label(cf, text="", bg=TH["bg"], fg=TH["err"], font=("Consolas", 9))
         self.wb_lbl.pack()
+        # Frequency
         ff = tk.Frame(r1, bg=TH["bg"])
         ff.pack(side="left", padx=3)
         tk.Label(ff, text=L.t("freq"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack()
-        self.ent["freq"] = tk.Entry(ff, width=9, bg=TH["entry_bg"], fg=TH["fg"], font=self.fn, insertbackground=TH["fg"], justify="center")
+        self.ent["freq"] = tk.Entry(ff, width=9, bg=TH["entry_bg"], fg=TH["fg"],
+                                     font=self.fn, insertbackground=TH["fg"], justify="center")
         self.ent["freq"].pack()
         self.ent["freq"].bind("<FocusOut>", self._on_freq_out)
+        self.ent["freq"].bind("<Return>", self._on_freq_enter)
+        # Band
         ab = cc.get("allowed_bands", BANDS_ALL)
-        bf = tk.Frame(r1, bg=TH["bg"])
-        bf.pack(side="left", padx=3)
-        tk.Label(bf, text=L.t("band"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack()
-        self.ent["band"] = ttk.Combobox(bf, values=ab, state="readonly", width=6, font=self.fn)
+        bf2 = tk.Frame(r1, bg=TH["bg"])
+        bf2.pack(side="left", padx=3)
+        tk.Label(bf2, text=L.t("band"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack()
+        self.ent["band"] = ttk.Combobox(bf2, values=ab, state="readonly", width=6, font=self.fn)
         self.ent["band"].set(ab[0] if ab else "40m")
         self.ent["band"].pack()
         self.ent["band"].bind("<<ComboboxSelected>>", self._on_band_change)
+        # Mode
         am = cc.get("allowed_modes", MODES_ALL)
-        mf = tk.Frame(r1, bg=TH["bg"])
-        mf.pack(side="left", padx=3)
-        tk.Label(mf, text=L.t("mode"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack()
-        self.ent["mode"] = ttk.Combobox(mf, values=am, state="readonly", width=6, font=self.fn)
+        mf2 = tk.Frame(r1, bg=TH["bg"])
+        mf2.pack(side="left", padx=3)
+        tk.Label(mf2, text=L.t("mode"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack()
+        self.ent["mode"] = ttk.Combobox(mf2, values=am, state="readonly", width=6, font=self.fn)
         self.ent["mode"].set(am[0] if am else "SSB")
         self.ent["mode"].pack()
         self.ent["mode"].bind("<<ComboboxSelected>>", self._on_mode_change)
+        # RST
+        default_rst = RST_DEFAULTS.get(am[0] if am else "SSB", "59")
         for k, lb in [("rst_s", L.t("rst_s")), ("rst_r", L.t("rst_r"))]:
             frame = tk.Frame(r1, bg=TH["bg"])
             frame.pack(side="left", padx=3)
             tk.Label(frame, text=lb, bg=TH["bg"], fg=TH["fg"], font=self.fn).pack()
-            e = tk.Entry(frame, width=5, bg=TH["entry_bg"], fg=TH["fg"], font=self.fn, insertbackground=TH["fg"], justify="center")
-            e.insert(0, RST_DEFAULTS.get(am[0] if am else "SSB", "59"))
+            e = tk.Entry(frame, width=5, bg=TH["entry_bg"], fg=TH["fg"],
+                         font=self.fn, insertbackground=TH["fg"], justify="center")
+            e.insert(0, default_rst)
             e.pack()
             self.ent[k] = e
+        # Serials
         if cc.get("use_serial"):
             for k, lb in [("ss", L.t("serial_s")), ("sr", L.t("serial_r"))]:
                 frame = tk.Frame(r1, bg=TH["bg"])
                 frame.pack(side="left", padx=3)
                 tk.Label(frame, text=lb, bg=TH["bg"], fg=TH["fg"], font=self.fn).pack()
-                e = tk.Entry(frame, width=5, bg=TH["entry_bg"], fg=TH["fg"], font=self.fn, insertbackground=TH["fg"], justify="center")
+                e = tk.Entry(frame, width=5, bg=TH["entry_bg"], fg=TH["fg"],
+                             font=self.fn, insertbackground=TH["fg"], justify="center")
                 if k == "ss":
                     e.insert(0, str(self.serial))
                 e.pack()
                 self.ent[k] = e
+        # Note
         nf = tk.Frame(r1, bg=TH["bg"])
         nf.pack(side="left", padx=3)
         tk.Label(nf, text=L.t("note"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack()
-        self.ent["note"] = tk.Entry(nf, width=13, bg=TH["entry_bg"], fg=TH["fg"], font=self.fn, insertbackground=TH["fg"], justify="center")
+        self.ent["note"] = tk.Entry(nf, width=13, bg=TH["entry_bg"], fg=TH["fg"],
+                                     font=self.fn, insertbackground=TH["fg"], justify="center")
         self.ent["note"].pack()
+        # Manual / LOG / Reset
         rbf = tk.Frame(r1, bg=TH["bg"])
         rbf.pack(side="left", padx=6)
         self.man_v = tk.BooleanVar(value=self.cfg.get("manual_dt", False))
-        tk.Checkbutton(rbf, text=L.t("manual"), variable=self.man_v, bg=TH["bg"], fg=TH["fg"], selectcolor=TH["entry_bg"], command=self._tog_man).pack()
-        self.log_btn = tk.Button(rbf, text=L.t("log"), command=self._add_qso, bg=TH["accent"], fg="white", font=self.fb, width=10)
+        tk.Checkbutton(rbf, text=L.t("manual"), variable=self.man_v,
+                       bg=TH["bg"], fg=TH["fg"], selectcolor=TH["entry_bg"],
+                       activebackground=TH["bg"], command=self._tog_man).pack()
+        self.log_btn = tk.Button(rbf, text=L.t("log"), command=self._add_qso,
+                                  bg=TH["accent"], fg="white", font=self.fb, width=10)
         self.log_btn.pack(pady=1)
-        tk.Button(rbf, text=L.t("reset"), command=self._clr, bg=TH["btn_bg"], fg=TH["btn_fg"], font=self.fn, width=10).pack(pady=1)
+        tk.Button(rbf, text=L.t("reset"), command=self._clr,
+                  bg=TH["btn_bg"], fg=TH["btn_fg"], font=self.fn, width=10).pack(pady=1)
+        # Row 2: date/time + category + county + save
         r2 = tk.Frame(ip, bg=TH["bg"])
         r2.pack(fill="x", pady=(6, 0))
         tk.Label(r2, text=L.t("date_l"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack(side="left", padx=3)
-        self.ent["date"] = tk.Entry(r2, width=11, bg=TH["entry_bg"], fg=TH["fg"], font=self.fn, justify="center", state="disabled")
+        self.ent["date"] = tk.Entry(r2, width=11, bg=TH["entry_bg"], fg=TH["fg"],
+                                     font=self.fn, justify="center", state="disabled")
         self.ent["date"].pack(side="left", padx=2)
         tk.Label(r2, text=L.t("time_l"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack(side="left", padx=3)
-        self.ent["time"] = tk.Entry(r2, width=7, bg=TH["entry_bg"], fg=TH["fg"], font=self.fn, justify="center", state="disabled")
+        self.ent["time"] = tk.Entry(r2, width=7, bg=TH["entry_bg"], fg=TH["fg"],
+                                     font=self.fn, justify="center", state="disabled")
         self.ent["time"].pack(side="left", padx=2)
         now = datetime.datetime.utcnow()
         for k, v in [("date", now.strftime("%Y-%m-%d")), ("time", now.strftime("%H:%M"))]:
             self.ent[k].config(state="normal")
             self.ent[k].insert(0, v)
-            self.ent[k].config(state="disabled")
+            if not self.man_v.get():
+                self.ent[k].config(state="disabled")
+        # Category
         tk.Label(r2, text=L.t("category"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack(side="left", padx=(12, 3))
         cats = cc.get("categories", ["A"])
-        self.cat_v = tk.StringVar(value=cats[0] if cats else "A")
-        ttk.Combobox(r2, textvariable=self.cat_v, values=cats, state="readonly", width=20).pack(side="left", padx=2)
+        self.cat_v = tk.StringVar(value=cats[self.cfg.get("cat", 0)] if cats else "")
+        ttk.Combobox(r2, textvariable=self.cat_v, values=cats,
+                     state="readonly", width=20).pack(side="left", padx=2)
+        # County (only if contest uses it)
+        if cc.get("use_county"):
+            tk.Label(r2, text=L.t("county"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack(side="left", padx=(8, 3))
+            county_list = cc.get("county_list", YO_COUNTIES)
+            self.cou_v = tk.StringVar(value=self.cfg.get("county", "NT"))
+            ttk.Combobox(r2, textvariable=self.cou_v, values=county_list,
+                         state="readonly", width=6).pack(side="left", padx=2)
+        # Save category/county button
+        tk.Button(r2, text=L.t("save_cat"), command=self._save_cat,
+                  bg=TH["btn_bg"], fg="white", font=("Consolas", 10)).pack(side="left", padx=8)
 
     def _build_flt(self):
         ff = tk.Frame(self, bg=TH["bg"])
@@ -951,7 +1725,8 @@ class App(tk.Tk):
         us = cc.get("use_serial", False)
         hs = cc.get("scoring_mode", "none") != "none"
         cols = ["nr", "call", "freq", "band", "mode", "rst_s", "rst_r"]
-        hdrs = [L.t("nr"), L.t("call"), L.t("freq"), L.t("band"), L.t("mode"), L.t("rst_s"), L.t("rst_r")]
+        hdrs = [L.t("nr"), L.t("call"), L.t("freq"), L.t("band"), L.t("mode"),
+                L.t("rst_s"), L.t("rst_r")]
         wids = [38, 115, 75, 55, 55, 45, 45]
         if us:
             cols += ["ss", "sr"]
@@ -966,49 +1741,56 @@ class App(tk.Tk):
             wids.append(50)
         self.tree = ttk.Treeview(tf, columns=cols, show="headings", selectmode="extended")
         for c, h, w in zip(cols, hdrs, wids):
-            self.tree.heading(c, text=h)
+            self.tree.heading(c, text=h,
+                               command=lambda col=c: self._sort_tree(col))
             self.tree.column(c, width=w, anchor="center")
         self.tree.tag_configure("dup", background=TH["dup_bg"])
         self.tree.tag_configure("alt", background=TH["alt"])
+        self.tree.tag_configure("spec", background=TH["spec_bg"])
         sb = ttk.Scrollbar(tf, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb.set)
         self.tree.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
         self.tree.bind("<Double-1>", lambda e: self._edit_sel())
         self.tree.bind("<Button-3>", self._on_rclick)
+        self._sort_col = None
+        self._sort_rev = False
+
+    def _sort_tree(self, col):
+        if self._sort_col == col:
+            self._sort_rev = not self._sort_rev
+        else:
+            self._sort_col = col
+            self._sort_rev = False
+        items = [(self.tree.set(k, col), k) for k in self.tree.get_children("")]
+        try:
+            items.sort(key=lambda x: float(x[0]) if x[0].lstrip("-").isdigit() else x[0],
+                       reverse=self._sort_rev)
+        except Exception:
+            items.sort(key=lambda x: x[0], reverse=self._sort_rev)
+        for idx, (_, k) in enumerate(items):
+            self.tree.move(k, "", idx)
 
     def _build_btns(self):
         bb = tk.Frame(self, bg=TH["bg"], pady=6)
         bb.pack(fill="x", padx=10)
-        btns = [(L.t("settings"), self._settings, TH["warn"]), (L.t("contests"), self._mgr, "#E91E63"), (L.t("stats"), self._stats, "#3F51B5"), (L.t("validate"), self._validate, TH["ok"]), (L.t("export"), self._export_dlg, "#9C27B0"), (L.t("import_log"), self._import_menu, "#FF5722"), (L.t("undo"), self._undo, "#795548"), (L.t("backup"), self._bak, "#607D8B")]
+        btns = [
+            (L.t("settings"),   self._settings,  TH["warn"]),
+            (L.t("contests"),   self._mgr,        "#E91E63"),
+            (L.t("stats"),      self._stats,      "#3F51B5"),
+            (L.t("validate"),   self._validate,   TH["ok"]),
+            (L.t("export"),     self._export_dlg, "#9C27B0"),
+            (L.t("import_log"), self._import_menu,"#FF5722"),
+            (L.t("undo"),       self._undo,       "#795548"),
+            (L.t("backup"),     self._bak,        "#607D8B"),
+            (L.t("search"),     self._search_dlg, "#00796B"),
+            (L.t("timer"),      self._timer_dlg,  "#004D40"),
+        ]
         for txt, cmd, col in btns:
-            tk.Button(bb, text=txt, command=cmd, bg=col, fg="white", font=("Consolas", 10), width=11).pack(side="left", padx=2)
+            tk.Button(bb, text=txt, command=cmd, bg=col, fg="white",
+                      font=("Consolas", 10), width=11).pack(side="left", padx=2)
 
-    def _tick_clock(self):
-        now = datetime.datetime.utcnow()
-        if self.clk:
-            self.clk.config(text=f"UTC {now.strftime('%H:%M:%S')}")
-        self.after(1000, self._tick_clock)
-
-    def _tick_save(self):
-        DM.save_log(self._cid(), self.log)
-        self.after(60000, self._tick_save)
-
-    def _fsave(self):
-        DM.save_log(self._cid(), self.log)
-        DM.save("config.json", self.cfg)
-        beep("success")
-
-    def _upd_info(self):
-        cc = self._cc()
-        call = self.cfg.get("call", "NOCALL")
-        nm = cc.get("name_" + L.g(), cc.get("name_ro", "?"))
-        if self.info_lbl:
-            self.info_lbl.config(text=f"{call} | {nm} | QSO: {len(self.log)}")
-        if self.sc_lbl:
-            qp, mc, tot = Score.total(self.log, cc, self.cfg)
-            self.sc_lbl.config(text=f"Σ {tot}" if cc.get("scoring_mode", "none") != "none" else "")
-
+    # ── refresh / update ─────────────────────────────────────────────────────
     def _refresh(self):
         if not self.tree:
             return
@@ -1019,6 +1801,7 @@ class App(tk.Tk):
         us = cc.get("use_serial", False)
         fb = self.fb_v.get() if self.fb_v else L.t("all")
         fm = self.fm_v.get() if self.fm_v else L.t("all")
+        sp_calls = set((cc.get("special_scoring") or {}).keys())
         seen = set()
         for i, q in enumerate(self.log):
             b, m, c = q.get("b", ""), q.get("m", ""), q.get("c", "").upper()
@@ -1027,22 +1810,62 @@ class App(tk.Tk):
             if fm != L.t("all") and m != fm:
                 continue
             nr = len(self.log) - i
-            tag = ()
             key = (c, b, m)
             if key in seen:
                 tag = ("dup",)
+            elif c in sp_calls:
+                tag = ("spec",)
             elif i % 2 == 0:
                 tag = ("alt",)
+            else:
+                tag = ()
             seen.add(key)
             country, _ = DXCC.lookup(c)
             vals = [nr, c, q.get("f", ""), b, m, q.get("s", "59"), q.get("r", "59")]
             if us:
                 vals += [q.get("ss", ""), q.get("sr", "")]
-            vals += [q.get("n", ""), country if country != "Unknown" else "", q.get("d", ""), q.get("t", "")]
+            vals += [q.get("n", ""), country if country != "Unknown" else "",
+                     q.get("d", ""), q.get("t", "")]
             if hs:
                 vals.append(Score.qso(q, cc, self.cfg))
             self.tree.insert("", "end", iid=str(i), values=vals, tags=tag)
         self._upd_info()
+
+    def _upd_info(self):
+        cc = self._cc()
+        call = self.cfg.get("call", "NOCALL")
+        nm = cc.get("name_" + L.g(), cc.get("name_ro", "?"))
+        cat = self.cat_v.get() if self.cat_v else ""
+        if self.info_lbl:
+            self.info_lbl.config(
+                text=f"{call} | {nm} | {cat} | QSO: {len(self.log)}")
+        if self.sc_lbl:
+            qp, mc, tot = Score.total(self.log, cc, self.cfg)
+            if cc.get("scoring_mode", "none") != "none":
+                if cc.get("multiplier_type", "none") != "none":
+                    self.sc_lbl.config(text=f"Σ {qp}×{mc}={tot}")
+                else:
+                    self.sc_lbl.config(text=f"Σ {tot}")
+            else:
+                self.sc_lbl.config(text="")
+        # Rate meter
+        if self.rate_lbl and len(self.log) >= 2:
+            try:
+                recent = [q for q in self.log[:20]]
+                dts = []
+                for q in recent:
+                    try:
+                        dts.append(datetime.datetime.strptime(
+                            q.get("d", "") + " " + q.get("t", ""), "%Y-%m-%d %H:%M"))
+                    except Exception:
+                        pass
+                if len(dts) >= 2:
+                    dts.sort()
+                    span = (dts[-1] - dts[0]).total_seconds() / 3600
+                    rate = len(dts) / span if span > 0 else 0
+                    self.rate_lbl.config(text=f"⚡{rate:.0f} {L.t('rate')}")
+            except Exception:
+                pass
 
     def _get_dt(self):
         if self.man_v and self.man_v.get():
@@ -1050,20 +1873,46 @@ class App(tk.Tk):
         now = datetime.datetime.utcnow()
         return now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
 
+    # ── QSO operations ───────────────────────────────────────────────────────
     def _add_qso(self):
         call = self.ent["call"].get().upper().strip()
         if not call:
             return
-        band, mode = self.ent["band"].get(), self.ent["mode"].get()
+        band = self.ent["band"].get()
+        mode = self.ent["mode"].get()
+        cc = self._cc()
+
+        # Duplicate check
         dup, di = Score.is_dup(self.log, call, band, mode, self.edit_idx)
-        if dup and not messagebox.askyesno(L.t("dup_warn"), L.t("dup_msg").format(call, band, mode, len(self.log) - di)):
-            return
+        if dup and self.edit_idx is None:
+            if self._sounds():
+                beep("warning")
+            if not messagebox.askyesno(L.t("dup_warn"),
+                                        L.t("dup_msg").format(call, band, mode,
+                                                               len(self.log) - di)):
+                return
+
+        # New multiplier notification
         ds, ts = self._get_dt()
-        q = {"c": call, "b": band, "m": mode, "s": self.ent["rst_s"].get() or "59", "r": self.ent["rst_r"].get() or "59", "n": self.ent["note"].get(), "d": ds, "t": ts, "f": self.ent["freq"].get()}
+        q_preview = {"c": call, "b": band, "m": mode,
+                      "n": self.ent["note"].get().upper().strip()}
+        if Score.is_new_mult(self.log, q_preview, cc):
+            if self._sounds():
+                beep("info")
+
+        q = {
+            "c": call, "b": band, "m": mode,
+            "s": self.ent["rst_s"].get() or "59",
+            "r": self.ent["rst_r"].get() or "59",
+            "n": self.ent["note"].get(),
+            "d": ds, "t": ts,
+            "f": self.ent["freq"].get()
+        }
         if "ss" in self.ent:
             q["ss"] = self.ent["ss"].get()
         if "sr" in self.ent:
             q["sr"] = self.ent["sr"].get()
+
         if self.edit_idx is not None:
             self.log[self.edit_idx] = q
             self.edit_idx = None
@@ -1072,6 +1921,7 @@ class App(tk.Tk):
             self.log.insert(0, q)
             self.undo_stack.append(("add", 0, q))
             self.serial += 1
+
         self._clr()
         self._refresh()
         DM.save_log(self._cid(), self.log)
@@ -1098,51 +1948,87 @@ class App(tk.Tk):
         self.ent["call"].insert(0, q.get("c", ""))
         self.ent["freq"].delete(0, "end")
         self.ent["freq"].insert(0, q.get("f", ""))
-        self.ent["band"].set(q.get("b", "40m"))
-        self.ent["mode"].set(q.get("m", "SSB"))
+        cc = self._cc()
+        ab = cc.get("allowed_bands", BANDS_ALL)
+        b = q.get("b", "40m")
+        if b in ab:
+            self.ent["band"].set(b)
+        am = cc.get("allowed_modes", MODES_ALL)
+        m = q.get("m", "SSB")
+        if m in am:
+            self.ent["mode"].set(m)
         self.ent["rst_s"].delete(0, "end")
         self.ent["rst_s"].insert(0, q.get("s", "59"))
         self.ent["rst_r"].delete(0, "end")
         self.ent["rst_r"].insert(0, q.get("r", "59"))
         self.ent["note"].delete(0, "end")
         self.ent["note"].insert(0, q.get("n", ""))
+        if "ss" in self.ent:
+            self.ent["ss"].delete(0, "end")
+            self.ent["ss"].insert(0, q.get("ss", ""))
+        if "sr" in self.ent:
+            self.ent["sr"].delete(0, "end")
+            self.ent["sr"].insert(0, q.get("sr", ""))
         self.log_btn.config(text=L.t("update"), bg=TH["warn"])
 
     def _del_sel(self):
         sel = self.tree.selection()
         if sel and messagebox.askyesno(L.t("confirm_del"), L.t("confirm_del_t")):
             for idx in sorted([int(x) for x in sel], reverse=True):
-                self.undo_stack.append(("del", idx, self.log.pop(idx)))
+                if 0 <= idx < len(self.log):
+                    self.undo_stack.append(("del", idx, copy.deepcopy(self.log[idx])))
+                    self.log.pop(idx)
             self._refresh()
             DM.save_log(self._cid(), self.log)
 
     def _undo(self):
         if not self.undo_stack:
+            messagebox.showinfo("", L.t("undo_empty"))
             return
         act, idx, q = self.undo_stack.pop()
-        if act == "add" and idx < len(self.log):
+        if act == "add" and 0 <= idx < len(self.log):
             self.log.pop(idx)
         elif act == "del":
             self.log.insert(idx, q)
         self._refresh()
         DM.save_log(self._cid(), self.log)
 
+    # ── event handlers ───────────────────────────────────────────────────────
     def _on_call_key(self, e=None):
         c = self.ent["call"].get().upper()
         pos = self.ent["call"].index(tk.INSERT)
         self.ent["call"].delete(0, tk.END)
         self.ent["call"].insert(0, c)
-        self.ent["call"].icursor(min(pos, len(c)))
-        if len(c) >= 3 and self.wb_lbl:
-            dup, _ = Score.is_dup(self.log, c, self.ent["band"].get(), self.ent["mode"].get(), self.edit_idx)
-            self.wb_lbl.config(text=f"⚠ DUP" if dup else "", fg=TH["err"])
+        try:
+            self.ent["call"].icursor(min(pos, len(c)))
+        except Exception:
+            pass
+        if self.wb_lbl:
+            if len(c) >= 3:
+                band = self.ent["band"].get()
+                mode = self.ent["mode"].get()
+                dup, _ = Score.is_dup(self.log, c, band, mode, self.edit_idx)
+                if dup:
+                    self.wb_lbl.config(text="⚠ DUP", fg=TH["err"])
+                elif Score.worked_other(self.log, c, band, mode):
+                    self.wb_lbl.config(text=f"ℹ {L.t('wb')}", fg=TH["warn"])
+                else:
+                    self.wb_lbl.config(text="")
+            else:
+                self.wb_lbl.config(text="")
 
     def _on_freq_out(self, e=None):
         f = self.ent["freq"].get().strip()
         if f:
             b = freq2band(f)
             if b:
-                self.ent["band"].set(b)
+                cc = self._cc()
+                ab = cc.get("allowed_bands", BANDS_ALL)
+                if b in ab:
+                    self.ent["band"].set(b)
+
+    def _on_freq_enter(self, e=None):
+        self._on_freq_out()
 
     def _on_band_change(self, e=None):
         b = self.ent["band"].get()
@@ -1182,6 +2068,7 @@ class App(tk.Tk):
         cur = self.ent["band"].get()
         idx = (ab.index(cur) + 1) % len(ab) if cur in ab else 0
         self.ent["band"].set(ab[idx])
+        self._on_band_change()
 
     def _cycle_mode(self, e=None):
         am = self._cc().get("allowed_modes", MODES_ALL)
@@ -1197,17 +2084,64 @@ class App(tk.Tk):
         if self.led_c:
             self.led_c.itemconfig(self.led, fill=TH["led_off"] if m else TH["led_on"])
         if self.st_lbl:
-            self.st_lbl.config(text=L.t("offline") if m else L.t("online"), fg=TH["led_off"] if m else TH["led_on"])
+            self.st_lbl.config(
+                text=L.t("offline") if m else L.t("online"),
+                fg=TH["led_off"] if m else TH["led_on"])
+        self.cfg["manual_dt"] = m
+
+    def _save_cat(self):
+        if self.cat_v:
+            cats = self._cc().get("categories", [])
+            cat_val = self.cat_v.get()
+            self.cfg["cat"] = cats.index(cat_val) if cat_val in cats else 0
+        if self.cou_v:
+            self.cfg["county"] = self.cou_v.get()
+        DM.save("config.json", self.cfg)
+        self._upd_info()
+
+    def _switch_contest(self, cid):
+        DM.save_log(self._cid(), self.log)
+        self.cfg["contest"] = cid
+        DM.save("config.json", self.cfg)
+        self.log = DM.load_log(cid)
+        self.serial = len(self.log) + 1
+        self._rebuild()
 
     def _rebuild(self):
+        # Save geometry
+        self.cfg["win_geo"] = self.geometry()
         for w in self.winfo_children():
             w.destroy()
         self.ent = {}
+        self.info_lbl = self.sc_lbl = self.clk = self.rate_lbl = None
+        self.led_c = self.led = self.st_lbl = self.wb_lbl = self.log_btn = None
+        self.tree = self.ctx = self.fb_v = self.fm_v = None
+        self.cv = self.ccb = self.lang_v = self.man_v = self.cat_v = self.cou_v = None
+        self._setup_style()
         self._build_menu()
         self._build_ui()
         self._build_ctx()
         self._refresh()
 
+    # ── clocks / timers ──────────────────────────────────────────────────────
+    def _tick_clock(self):
+        now = datetime.datetime.utcnow()
+        if self.clk:
+            self.clk.config(text=f"UTC {now.strftime('%H:%M:%S')}")
+        self.after(1000, self._tick_clock)
+
+    def _tick_save(self):
+        DM.save_log(self._cid(), self.log)
+        self.after(60000, self._tick_save)
+
+    def _fsave(self):
+        DM.save_log(self._cid(), self.log)
+        DM.save("config.json", self.cfg)
+        DM.save("contests.json", self.contests)
+        if self._sounds():
+            beep("success")
+
+    # ── dialogs ─────────────────────────────────────────────────────────────
     def _mgr(self):
         d = ContestMgr(self, self.contests)
         self.wait_window(d)
@@ -1219,68 +2153,114 @@ class App(tk.Tk):
     def _about(self):
         d = tk.Toplevel(self)
         d.title(L.t("about"))
-        d.geometry("450x300")
+        d.geometry("460x280")
         d.configure(bg=TH["bg"])
-        tk.Label(d, text="📻 YO Log PRO v16.0 FINAL", bg=TH["bg"], fg=TH["accent"], font=("Consolas", 16, "bold")).pack(pady=12)
+        tk.Label(d, text="📻 YO Log PRO v16.1", bg=TH["bg"], fg=TH["accent"],
+                 font=("Consolas", 16, "bold")).pack(pady=12)
         tk.Label(d, text=L.t("credits"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack(pady=8)
-        tk.Label(d, text=L.t("usage"), bg=TH["bg"], fg=TH["fg"], font=("Consolas", 9)).pack(pady=6)
-        tk.Button(d, text=L.t("close"), command=d.destroy, bg=TH["accent"], fg="white", width=12).pack(pady=10)
+        tk.Label(d, text=L.t("usage"), bg=TH["bg"], fg=TH["fg"],
+                 font=("Consolas", 9)).pack(pady=6)
+        tk.Button(d, text=L.t("close"), command=d.destroy,
+                  bg=TH["accent"], fg="white", width=12).pack(pady=10)
 
     def _settings(self):
         d = tk.Toplevel(self)
         d.title(L.t("settings"))
-        d.geometry("400x380")
+        d.geometry("420x460")
         d.configure(bg=TH["bg"])
-        eo = {"bg": TH["entry_bg"], "fg": TH["fg"], "font": self.fn}
+        eo = {"bg": TH["entry_bg"], "fg": TH["fg"], "font": self.fn,
+               "insertbackground": TH["fg"]}
+        fields = [
+            ("call",    L.t("call"),     self.cfg.get("call", "")),
+            ("loc",     L.t("locator"),  self.cfg.get("loc", "")),
+            ("jud",     L.t("county"),   self.cfg.get("jud", "")),
+            ("addr",    L.t("address"),  self.cfg.get("addr", "")),
+            ("op_name", L.t("op"),       self.cfg.get("op_name", "")),
+            ("power",   L.t("power"),    self.cfg.get("power", "100")),
+            ("fs",      L.t("font_size"),str(self.cfg.get("fs", 11))),
+        ]
         es = {}
-        for k, lb, v in [("call", L.t("call"), self.cfg.get("call", "")), ("loc", L.t("locator"), self.cfg.get("loc", "")), ("jud", L.t("county"), self.cfg.get("jud", "")), ("op_name", L.t("op"), self.cfg.get("op_name", "")), ("power", L.t("power"), self.cfg.get("power", "100"))]:
+        for k, lb, v in fields:
             tk.Label(d, text=lb, bg=TH["bg"], fg=TH["fg"]).pack(anchor="w", padx=15)
             e = tk.Entry(d, width=35, **eo)
             e.insert(0, v)
             e.pack(pady=2, padx=15)
             es[k] = e
 
-        def save():
-            for k in es:
-                self.cfg[k] = es[k].get().upper().strip() if k in ["call", "loc", "jud"] else es[k].get().strip()
-            DM.save("config.json", self.cfg)
-            self._upd_info()
-            d.destroy()
+        # Sounds checkbox
+        snd_v = tk.BooleanVar(value=self.cfg.get("sounds", True))
+        tk.Checkbutton(d, text=L.t("en_sounds"), variable=snd_v,
+                       bg=TH["bg"], fg=TH["fg"], selectcolor=TH["entry_bg"],
+                       activebackground=TH["bg"]).pack(anchor="w", padx=15, pady=4)
 
-        tk.Button(d, text=L.t("save"), command=save, bg=TH["accent"], fg="white", width=12).pack(pady=15)
+        def save():
+            upper_fields = {"call", "loc", "jud"}
+            for k in es:
+                v = es[k].get().strip()
+                self.cfg[k] = v.upper() if k in upper_fields else v
+            try:
+                self.cfg["fs"] = int(es["fs"].get().strip())
+            except Exception:
+                self.cfg["fs"] = 11
+            self.cfg["sounds"] = snd_v.get()
+            DM.save("config.json", self.cfg)
+            d.destroy()
+            self._rebuild()
+
+        tk.Button(d, text=L.t("save"), command=save,
+                  bg=TH["accent"], fg="white", width=12).pack(pady=12)
 
     def _stats(self):
-        d = tk.Toplevel(self)
-        d.title(L.t("stats"))
-        d.geometry("500x400")
-        d.configure(bg=TH["bg"])
-        txt = tk.Text(d, bg=TH["entry_bg"], fg=TH["fg"], font=("Consolas", 11))
-        txt.pack(fill="both", expand=True, padx=10, pady=10)
-        cc = self._cc()
-        txt.insert("end", f"📊 {L.t('stats')}\n\n")
-        txt.insert("end", f"Total QSO: {len(self.log)}\n")
-        txt.insert("end", f"Unique: {len({q.get('c', '').upper() for q in self.log})}\n\n")
-        bc = Counter(q.get("b", "") for q in self.log)
-        for b in sorted(bc.keys()):
-            txt.insert("end", f"{b}: {bc[b]}\n")
-        qp, mc, tot = Score.total(self.log, cc, self.cfg)
-        txt.insert("end", f"\nScore: {tot}\n")
-        txt.config(state="disabled")
+        StatsWindow(self, self.log, self._cc(), self.cfg)
 
     def _validate(self):
         ok, msg, _ = Score.validate(self.log, self._cc(), self.cfg)
-        messagebox.showinfo(L.t("val_result"), msg) if ok else messagebox.showwarning(L.t("val_result"), msg)
+        if ok:
+            messagebox.showinfo(L.t("val_result"), msg)
+        else:
+            messagebox.showwarning(L.t("val_result"), msg)
 
+    def _search_dlg(self):
+        SearchDialog(self, self.log)
+
+    def _timer_dlg(self):
+        TimerDialog(self)
+
+    def _verify_hash(self):
+        try:
+            raw = json.dumps(self.log, ensure_ascii=False, sort_keys=True)
+            h = hashlib.md5(raw.encode("utf-8")).hexdigest()
+            messagebox.showinfo(L.t("hash_ok"),
+                                 L.t("verify_ok").format(len(self.log), h))
+        except Exception as e:
+            messagebox.showerror(L.t("error"), str(e))
+
+    def _clear_log(self):
+        if not self.log:
+            return
+        if messagebox.askyesno(L.t("clear_log"), L.t("clear_conf")):
+            DM.backup(self._cid(), self.log)
+            self.log.clear()
+            self.serial = 1
+            self.undo_stack.clear()
+            self._refresh()
+            DM.save_log(self._cid(), self.log)
+
+    # ── import ───────────────────────────────────────────────────────────────
     def _import_menu(self):
         d = tk.Toplevel(self)
         d.title(L.t("import_log"))
-        d.geometry("250x140")
+        d.geometry("260x150")
         d.configure(bg=TH["bg"])
-        tk.Button(d, text="ADIF (.adi)", command=lambda: [d.destroy(), self._import_adif()], bg=TH["accent"], fg="white", width=20).pack(pady=8)
-        tk.Button(d, text="CSV (.csv)", command=lambda: [d.destroy(), self._import_csv()], bg=TH["accent"], fg="white", width=20).pack(pady=8)
+        tk.Button(d, text="ADIF (.adi / .adif)",
+                  command=lambda: [d.destroy(), self._import_adif()],
+                  bg=TH["accent"], fg="white", width=22).pack(pady=8)
+        tk.Button(d, text="CSV (.csv)",
+                  command=lambda: [d.destroy(), self._import_csv()],
+                  bg=TH["accent"], fg="white", width=22).pack(pady=8)
 
     def _import_adif(self):
-        fp = filedialog.askopenfilename(filetypes=[("ADIF", "*.adi *.adif")])
+        fp = filedialog.askopenfilename(filetypes=[("ADIF", "*.adi *.adif"), ("All", "*.*")])
         if fp:
             try:
                 with open(fp, "r", encoding="utf-8", errors="replace") as f:
@@ -1290,11 +2270,13 @@ class App(tk.Tk):
                     self._refresh()
                     DM.save_log(self._cid(), self.log)
                     messagebox.showinfo("OK", L.t("imp_ok").format(len(qsos)))
+                else:
+                    messagebox.showwarning("", "0 QSO importate / imported.")
             except Exception as e:
                 messagebox.showerror(L.t("error"), str(e))
 
     def _import_csv(self):
-        fp = filedialog.askopenfilename(filetypes=[("CSV", "*.csv")])
+        fp = filedialog.askopenfilename(filetypes=[("CSV", "*.csv"), ("All", "*.*")])
         if fp:
             try:
                 with open(fp, "r", encoding="utf-8", errors="replace") as f:
@@ -1304,65 +2286,252 @@ class App(tk.Tk):
                     self._refresh()
                     DM.save_log(self._cid(), self.log)
                     messagebox.showinfo("OK", L.t("imp_ok").format(len(qsos)))
+                else:
+                    messagebox.showwarning("", "0 QSO importate / imported.")
             except Exception as e:
                 messagebox.showerror(L.t("error"), str(e))
 
+    # ── export ───────────────────────────────────────────────────────────────
     def _export_dlg(self):
         d = tk.Toplevel(self)
         d.title(L.t("export"))
-        d.geometry("250x180")
+        d.geometry("260x220")
         d.configure(bg=TH["bg"])
-        for txt, cmd in [("Cabrillo (.log)", lambda: self._exp_cab(d)), ("ADIF (.adi)", lambda: self._exp_adif(d)), ("CSV (.csv)", lambda: self._exp_csv(d))]:
-            tk.Button(d, text=txt, command=cmd, bg=TH["accent"], fg="white", width=20).pack(pady=5)
+        for txt, cmd in [
+            ("Cabrillo 3.0 (.log)", lambda: self._exp_cab(d)),
+            ("ADIF 3.1 (.adi)",     lambda: self._exp_adif(d)),
+            ("CSV (.csv)",          lambda: self._exp_csv(d)),
+            (L.t("exp_edi"),        lambda: self._exp_edi(d)),
+            (L.t("exp_print"),      lambda: self._exp_print(d)),
+        ]:
+            tk.Button(d, text=txt, command=cmd,
+                      bg=TH["accent"], fg="white", width=24).pack(pady=4)
 
-    def _exp_cab(self, parent):
+    def _exp_cab(self, parent=None):
         try:
             my = self.cfg.get("call", "NOCALL")
-            lines = ["START-OF-LOG: 3.0", f"CALLSIGN: {my}", f"GRID-LOCATOR: {self.cfg.get('loc', '')}", "CREATED-BY: YO Log PRO v16.0"]
+            cc = self._cc()
+            nm = cc.get("name_en", cc.get("name_ro", "CONTEST"))
+            cat_op = "SINGLE-OP"
+            cat_band = "ALL"
+            cat_power = "HIGH"
+            pw = int(self.cfg.get("power", "100"))
+            if pw <= 5:
+                cat_power = "QRP"
+            elif pw <= 100:
+                cat_power = "LOW"
+            lines = [
+                "START-OF-LOG: 3.0",
+                f"CONTEST: {nm}",
+                f"CALLSIGN: {my}",
+                f"GRID-LOCATOR: {self.cfg.get('loc', '')}",
+                f"CATEGORY-OPERATOR: {cat_op}",
+                f"CATEGORY-BAND: {cat_band}",
+                f"CATEGORY-POWER: {cat_power}",
+                f"CATEGORY-MODE: MIXED",
+                f"NAME: {self.cfg.get('op_name', '')}",
+                f"ADDRESS: {self.cfg.get('addr', '')}",
+                f"SOAPBOX: Logged with YO Log PRO v16.1",
+                "CREATED-BY: YO Log PRO v16.1",
+            ]
             for q in self.log:
                 freq = q.get("f", "") or str(BAND_FREQ.get(q.get("b", ""), 0))
-                lines.append(f"QSO: {freq} {q['m']} {q['d']} {q['t']} {my} {q.get('s', '59')} {q['c']} {q.get('r', '59')}")
+                rst_s = q.get("s", "59")
+                rst_r = q.get("r", "59")
+                exch_s = q.get("ss", q.get("n", ""))
+                exch_r = q.get("sr", q.get("n", ""))
+                lines.append(
+                    f"QSO: {freq:>6} {q['m']:<5} {q['d'].replace('-', '')} "
+                    f"{q['t'].replace(':', '')} "
+                    f"{my:<13} {rst_s:<4} {exch_s:<10} "
+                    f"{q['c']:<13} {rst_r:<4} {exch_r}")
             lines.append("END-OF-LOG:")
-            fn = f"cabrillo_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.log"
-            with open(os.path.join(get_data_dir(), fn), "w", encoding="utf-8") as f:
+            fn = f"cabrillo_{self._cid()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.log"
+            fp = os.path.join(get_data_dir(), fn)
+            with open(fp, "w", encoding="utf-8") as f:
                 f.write("\n".join(lines))
             messagebox.showinfo(L.t("exp_ok"), f"→ {fn}")
-            parent.destroy()
+            if parent:
+                parent.destroy()
         except Exception as e:
             messagebox.showerror(L.t("error"), str(e))
 
-    def _exp_adif(self, parent):
+    def _exp_adif(self, parent=None):
         try:
-            lines = ["<ADIF_VER:5>3.1.0", "<PROGRAMID:14>YO_Log_PRO_v16", "<EOH>"]
+            my_loc = self.cfg.get("loc", "")
+            lines = [
+                "<ADIF_VER:5>3.1.0",
+                f"<PROGRAMID:14>YO_Log_PRO_v16",
+                "<PROGRAMVERSION:5>16.1",
+                f"<MY_GRIDSQUARE:{len(my_loc)}>{my_loc}",
+                "<EOH>",
+            ]
             for q in self.log:
-                r = f"<CALL:{len(q['c'])}>{q['c']}<BAND:{len(q['b'])}>{q['b']}<MODE:{len(q['m'])}>{q['m']}"
-                dc = q.get('d', '').replace("-", "")
-                r += f"<QSO_DATE:{len(dc)}>{dc}"
-                tc = q.get('t', '').replace(":", "") + "00"
-                r += f"<TIME_ON:{len(tc)}>{tc}"
-                r += f"<RST_SENT:{len(q.get('s', '59'))}>{q.get('s', '59')}<RST_RCVD:{len(q.get('r', '59'))}>{q.get('r', '59')}<EOR>"
-                lines.append(r)
+                c = q.get("c", "")
+                b = q.get("b", "40m")
+                m = q.get("m", "SSB")
+                rst_s = q.get("s", "59")
+                rst_r = q.get("r", "59")
+                dc = q.get("d", "").replace("-", "")
+                tc = q.get("t", "").replace(":", "") + "00"
+                note = q.get("n", "")
+                ss = q.get("ss", "")
+                sr = q.get("sr", "")
+                # Frequency in MHz
+                freq_khz = q.get("f", "")
+                freq_mhz = ""
+                if freq_khz:
+                    try:
+                        freq_mhz = f"{float(freq_khz) / 1000:.4f}"
+                    except Exception:
+                        pass
+
+                def af(tag, val):
+                    if val:
+                        return f"<{tag}:{len(str(val))}>{val}"
+                    return ""
+
+                parts = [
+                    af("CALL", c), af("BAND", b), af("MODE", m),
+                    af("QSO_DATE", dc), af("TIME_ON", tc),
+                    af("RST_SENT", rst_s), af("RST_RCVD", rst_r),
+                ]
+                if freq_mhz:
+                    parts.append(af("FREQ", freq_mhz))
+                if Loc.valid(note[:6] if len(note) >= 6 else note):
+                    parts.append(af("GRIDSQUARE", note))
+                elif note:
+                    parts.append(af("COMMENT", note))
+                if ss:
+                    parts.append(af("STX", ss))
+                if sr:
+                    parts.append(af("SRX", sr))
+                parts.append("<EOR>")
+                lines.append("".join(p for p in parts if p))
+
             fn = f"adif_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.adi"
-            with open(os.path.join(get_data_dir(), fn), "w", encoding="utf-8") as f:
+            fp = os.path.join(get_data_dir(), fn)
+            with open(fp, "w", encoding="utf-8") as f:
                 f.write("\n".join(lines))
             messagebox.showinfo(L.t("exp_ok"), f"→ {fn}")
-            parent.destroy()
+            if parent:
+                parent.destroy()
         except Exception as e:
             messagebox.showerror(L.t("error"), str(e))
 
-    def _exp_csv(self, parent):
+    def _exp_csv(self, parent=None):
         try:
             fn = f"log_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.csv"
-            with open(os.path.join(get_data_dir(), fn), "w", encoding="utf-8", newline='') as f:
+            fp = os.path.join(get_data_dir(), fn)
+            with open(fp, "w", encoding="utf-8", newline='') as f:
                 w = csv.writer(f)
-                w.writerow(["Nr", "Date", "Time", "Call", "Freq", "Band", "Mode", "RST_S", "RST_R", "Note"])
+                w.writerow(["Nr", "Date", "Time", "Call", "Freq", "Band",
+                             "Mode", "RST_S", "RST_R", "Nr_S", "Nr_R",
+                             "Note", "Country", "Score"])
+                cc = self._cc()
                 for i, q in enumerate(self.log):
-                    w.writerow([len(self.log) - i, q.get('d', ''), q.get('t', ''), q.get('c', ''), q.get('f', ''), q.get('b', ''), q.get('m', ''), q.get('s', ''), q.get('r', ''), q.get('n', '')])
+                    country, _ = DXCC.lookup(q.get("c", ""))
+                    pts = Score.qso(q, cc, self.cfg)
+                    w.writerow([
+                        len(self.log) - i,
+                        q.get("d", ""), q.get("t", ""), q.get("c", ""),
+                        q.get("f", ""), q.get("b", ""), q.get("m", ""),
+                        q.get("s", ""), q.get("r", ""),
+                        q.get("ss", ""), q.get("sr", ""),
+                        q.get("n", ""), country if country != "Unknown" else "",
+                        pts
+                    ])
             messagebox.showinfo(L.t("exp_ok"), f"→ {fn}")
-            parent.destroy()
+            if parent:
+                parent.destroy()
         except Exception as e:
             messagebox.showerror(L.t("error"), str(e))
 
+    def _exp_edi(self, parent=None):
+        try:
+            my = self.cfg.get("call", "NOCALL")
+            my_loc = self.cfg.get("loc", "")
+            cc = self._cc()
+            nm = cc.get("name_en", cc.get("name_ro", "VHF"))
+            now = datetime.datetime.utcnow()
+            lines = [
+                "[REG1TEST;1]",
+                f"TName={nm}",
+                f"TDate={now.strftime('%y%m%d')};{now.strftime('%y%m%d')}",
+                f"PCall={my}",
+                f"PWWLo={my_loc}",
+                f"PExch=",
+                f"PAdr1={self.cfg.get('addr', '')}",
+                f"PBand=144",
+                f"PSect=",
+                "[Remarks]",
+                "Logged with YO Log PRO v16.1",
+                "[QSORecords]",
+            ]
+            for q in self.log:
+                dt = q.get("d", "").replace("-", "")[2:]  # YYMMDD
+                tm = q.get("t", "").replace(":", "")[:4]
+                call = q.get("c", "")
+                rst_s = q.get("s", "59")
+                rst_r = q.get("r", "59")
+                locator = q.get("n", "")
+                ss = q.get("ss", "")
+                sr = q.get("sr", "")
+                km = 0
+                if my_loc and Loc.valid(locator):
+                    km = Loc.dist(my_loc, locator)
+                lines.append(
+                    f"{dt};{tm};{call};1;{rst_s};{ss};{rst_r};{sr};{locator};{int(km)}")
+            fn = f"edi_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.edi"
+            fp = os.path.join(get_data_dir(), fn)
+            with open(fp, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+            messagebox.showinfo(L.t("exp_ok"), f"→ {fn}")
+            if parent:
+                parent.destroy()
+        except Exception as e:
+            messagebox.showerror(L.t("error"), str(e))
+
+    def _exp_print(self, parent=None):
+        try:
+            my = self.cfg.get("call", "NOCALL")
+            cc = self._cc()
+            nm = cc.get("name_" + L.g(), cc.get("name_ro", "?"))
+            lines = [
+                f"{'=' * 90}",
+                f"YO Log PRO v16.1  —  {my}  —  {nm}",
+                f"Generat / Generated: {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC",
+                f"{'=' * 90}",
+                f"{'Nr':<4} {'Call':<13} {'Freq':<8} {'Band':<6} {'Mode':<6} "
+                f"{'RSTt':<5} {'RSTr':<5} {'Note':<10} {'Country':<15} {'Date':<11} {'Time':<6} {'Pts':<5}",
+                f"{'-' * 90}",
+            ]
+            for i, q in enumerate(self.log):
+                nr = len(self.log) - i
+                country, _ = DXCC.lookup(q.get("c", ""))
+                pts = Score.qso(q, cc, self.cfg)
+                lines.append(
+                    f"{nr:<4} {q.get('c',''):<13} {q.get('f',''):<8} {q.get('b',''):<6} "
+                    f"{q.get('m',''):<6} {q.get('s',''):<5} {q.get('r',''):<5} "
+                    f"{q.get('n',''):<10} {country[:14]:<15} {q.get('d',''):<11} "
+                    f"{q.get('t',''):<6} {pts:<5}")
+            lines.append(f"{'=' * 90}")
+            qp, mc, tot = Score.total(self.log, cc, self.cfg)
+            lines.append(f"Total QSO: {len(self.log)}  |  Score: {qp}×{mc}={tot}")
+            fn = f"print_{self._cid()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.txt"
+            fp = os.path.join(get_data_dir(), fn)
+            with open(fp, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+            messagebox.showinfo(L.t("exp_ok"), f"→ {fn}")
+            if parent:
+                parent.destroy()
+        except Exception as e:
+            messagebox.showerror(L.t("error"), str(e))
+
+    def _print_log(self):
+        self._exp_print()
+
+    # ── backup ───────────────────────────────────────────────────────────────
     def _bak(self):
         if DM.backup(self._cid(), self.log):
             messagebox.showinfo("OK", L.t("bak_ok"))
@@ -1371,12 +2540,15 @@ class App(tk.Tk):
 
     def _exit(self):
         if messagebox.askyesno(L.t("exit_t"), L.t("exit_m")):
+            self.cfg["win_geo"] = self.geometry()
             DM.save_log(self._cid(), self.log)
             DM.save("config.json", self.cfg)
             DM.save("contests.json", self.contests)
+            DM.backup(self._cid(), self.log)
             self.destroy()
 
 
+# ─── Entry point ──────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     app = App()
     app.mainloop()
