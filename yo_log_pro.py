@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-YO Log PRO v16.0 FINAL — Professional Multi-Contest Amateur Radio Logger
+YO Log PRO v16.1 FINAL — Professional Multi-Contest Amateur Radio Logger
 Developed by: Ardei Constantin-Cătălin (YO8ACR)
 Email: yo8acr@gmail.com
 
-FIXES v16.1:
+FIXES v16.2:
+- FIXED: 'dict' object has no attribute 'insert' — DM.load() returned {} instead of []
+- FIXED: All popup dialogs now center on parent window
 - ContestEditor: fields for categories, bands, modes, required_stations, special_scoring, band_points, county_list fully editable
 - ContestMgr: Duplicate + Export + Import buttons added
 - Stats window: full detailed stats (bands, modes, DXCC, worked-all, operating time, rate)
@@ -68,6 +70,34 @@ def beep(kind="info"):
         winsound.MessageBeep(m.get(kind, 0x0))
     except Exception:
         pass
+
+
+# ─── CENTER DIALOG HELPER ───────────────────────────────────────────────────
+def center_dialog(dialog, parent=None):
+    """Center a Toplevel dialog on its parent window."""
+    dialog.update_idletasks()
+    geo = dialog.geometry()
+    m = re.match(r'(\d+)x(\d+)', geo)
+    if m:
+        dw, dh = int(m.group(1)), int(m.group(2))
+    else:
+        dw = dialog.winfo_reqwidth()
+        dh = dialog.winfo_reqheight()
+    if parent and parent.winfo_exists():
+        px = parent.winfo_rootx()
+        py = parent.winfo_rooty()
+        pw = parent.winfo_width()
+        ph = parent.winfo_height()
+        x = px + (pw - dw) // 2
+        y = py + (ph - dh) // 2
+    else:
+        sw = dialog.winfo_screenwidth()
+        sh = dialog.winfo_screenheight()
+        x = (sw - dw) // 2
+        y = (sh - dh) // 2
+    x = max(0, x)
+    y = max(0, y)
+    dialog.geometry(f"{dw}x{dh}+{x}+{y}")
 
 
 # ─── Maidenhead / Haversine ─────────────────────────────────────────────────
@@ -252,7 +282,7 @@ YO_COUNTIES = ["AB", "AR", "AG", "BC", "BH", "BN", "BT", "BV", "BR", "BZ",
 # ─── Translations ─────────────────────────────────────────────────────────────
 T = {
     "ro": {
-        "app_title": "YO Log PRO v16.1", "call": "Indicativ", "band": "Bandă", "mode": "Mod",
+        "app_title": "YO Log PRO v16.2", "call": "Indicativ", "band": "Bandă", "mode": "Mod",
         "rst_s": "RST S", "rst_r": "RST R", "serial_s": "Nr S", "serial_r": "Nr R",
         "freq": "Frecv (kHz)", "note": "Notă/Locator", "log": "LOG", "update": "ACTUALIZEAZĂ",
         "search": "🔍 Caută", "reset": "Reset", "settings": "⚙ Setări",
@@ -309,7 +339,7 @@ T = {
         "hash_ok": "Hash MD5 OK", "hash_err": "Eroare hash",
     },
     "en": {
-        "app_title": "YO Log PRO v16.1", "call": "Callsign", "band": "Band", "mode": "Mode",
+        "app_title": "YO Log PRO v16.2", "call": "Callsign", "band": "Band", "mode": "Mode",
         "rst_s": "RST S", "rst_r": "RST R", "serial_s": "Nr S", "serial_r": "Nr R",
         "freq": "Freq (kHz)", "note": "Note/Locator", "log": "LOG", "update": "UPDATE",
         "search": "🔍 Search", "reset": "Reset", "settings": "⚙ Settings",
@@ -486,12 +516,14 @@ class DM:
         if not os.path.exists(p):
             if default is not None:
                 DM.save(fn, default)
-            return copy.deepcopy(default) if default else {}
+            # ── FIX v16.2: was "if default" which is False for [] ──
+            return copy.deepcopy(default) if default is not None else {}
         try:
             with open(p, "r", encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
-            return copy.deepcopy(default) if default else {}
+            # ── FIX v16.2: same fix here ──
+            return copy.deepcopy(default) if default is not None else {}
 
     @staticmethod
     def log_fn(cid):
@@ -499,7 +531,11 @@ class DM:
 
     @staticmethod
     def load_log(cid):
-        return DM.load(DM.log_fn(cid), [])
+        # ── FIX v16.2: guarantee we always return a list ──
+        data = DM.load(DM.log_fn(cid), [])
+        if not isinstance(data, list):
+            return []
+        return data
 
     @staticmethod
     def save_log(cid, d):
@@ -660,11 +696,9 @@ class Score:
         if not rules:
             return True, f"OK: {len(data)} QSO", len(data)
         msgs = []
-        # Min QSO check
         mq = rules.get("min_qso", 0)
         if mq > 0 and len(data) < mq:
             msgs.append(f"⚠ Min {mq} QSO, aveți/you have {len(data)}")
-        # Duplicate check
         seen = set()
         dc = 0
         for q in data:
@@ -674,14 +708,12 @@ class Score:
             seen.add(k)
         if dc:
             msgs.append(f"⚠ {dc} duplicate(s)")
-        # Required stations check
         req = rules.get("required_stations", [])
         if req:
             calls_in_log = {q.get("c", "").upper() for q in data}
             missing = [r for r in req if r.upper() not in calls_in_log]
             if missing:
                 msgs.append(f"⚠ Stații lipsă / Missing: {', '.join(missing)}")
-        # Forbidden bands/modes check
         ab = rules.get("allowed_bands", [])
         am = rules.get("allowed_modes", [])
         if ab:
@@ -731,12 +763,11 @@ class Importer:
                       else datetime.datetime.utcnow().strftime("%Y-%m-%d"))
             qt = fields.get("TIME_ON", "")
             q["t"] = f"{qt[:2]}:{qt[2:4]}" if len(qt) >= 4 else "00:00"
-            # FREQ: convert MHz to kHz if needed
             freq_raw = fields.get("FREQ", "")
             if freq_raw:
                 try:
                     fv = float(freq_raw)
-                    if fv < 1000:   # MHz → kHz
+                    if fv < 1000:
                         fv = round(fv * 1000)
                     q["f"] = str(int(fv))
                 except Exception:
@@ -800,9 +831,10 @@ class ContestEditor(tk.Toplevel):
         self.transient(parent)
         self.grab_set()
         self._build()
+        # ── FIX v16.2: center on parent ──
+        center_dialog(self, parent)
 
     def _build(self):
-        # Scrollable canvas
         outer = tk.Frame(self, bg=TH["bg"])
         outer.pack(fill="both", expand=True)
         canvas = tk.Canvas(outer, bg=TH["bg"], highlightthickness=0)
@@ -881,14 +913,12 @@ class ContestEditor(tk.Toplevel):
                        activebackground=TH["bg"]).grid(row=r, column=0, columnspan=2, sticky="w", pady=3)
         r += 1
 
-        # Categories (text area)
         tk.Label(f, text=L.t("cats"), **lo).grid(row=r, column=0, sticky="nw", pady=3)
         self._cats_t = tk.Text(f, width=38, height=4, **eo)
         self._cats_t.insert("1.0", "\n".join(self.d.get("categories", [])))
         self._cats_t.grid(row=r, column=1, sticky="w", pady=3)
         r += 1
 
-        # Allowed Bands (checkboxes)
         tk.Label(f, text=L.t("a_bands"), **lo).grid(row=r, column=0, sticky="nw", pady=3)
         bf = tk.Frame(f, bg=TH["bg"])
         bf.grid(row=r, column=1, sticky="w", pady=3)
@@ -902,7 +932,6 @@ class ContestEditor(tk.Toplevel):
                            font=("Consolas", 9)).grid(row=i // 7, column=i % 7, sticky="w")
         r += 1
 
-        # Allowed Modes (checkboxes)
         tk.Label(f, text=L.t("a_modes"), **lo).grid(row=r, column=0, sticky="nw", pady=3)
         mf = tk.Frame(f, bg=TH["bg"])
         mf.grid(row=r, column=1, sticky="w", pady=3)
@@ -916,14 +945,12 @@ class ContestEditor(tk.Toplevel):
                            font=("Consolas", 9)).grid(row=i // 4, column=i % 4, sticky="w")
         r += 1
 
-        # Required stations
         tk.Label(f, text=L.t("req_st_c"), **lo).grid(row=r, column=0, sticky="nw", pady=3)
         self._req_t = tk.Text(f, width=38, height=4, **eo)
         self._req_t.insert("1.0", "\n".join(self.d.get("required_stations", [])))
         self._req_t.grid(row=r, column=1, sticky="w", pady=3)
         r += 1
 
-        # Special scoring
         tk.Label(f, text=L.t("sp_sc"), **lo).grid(row=r, column=0, sticky="nw", pady=3)
         self._sp_t = tk.Text(f, width=38, height=3, **eo)
         sp_lines = [f"{k}={v}" for k, v in self.d.get("special_scoring", {}).items()]
@@ -931,7 +958,6 @@ class ContestEditor(tk.Toplevel):
         self._sp_t.grid(row=r, column=1, sticky="w", pady=3)
         r += 1
 
-        # Band points
         tk.Label(f, text=L.t("band_pts"), **lo).grid(row=r, column=0, sticky="nw", pady=3)
         self._bp_t = tk.Text(f, width=38, height=3, **eo)
         bp_lines = [f"{k}={v}" for k, v in self.d.get("band_points", {}).items()]
@@ -939,14 +965,12 @@ class ContestEditor(tk.Toplevel):
         self._bp_t.grid(row=r, column=1, sticky="w", pady=3)
         r += 1
 
-        # County list
         tk.Label(f, text=L.t("county_list"), **lo).grid(row=r, column=0, sticky="w", pady=3)
         self._cl_e = tk.Entry(f, width=50, **eo)
         self._cl_e.insert(0, ",".join(self.d.get("county_list", [])))
         self._cl_e.grid(row=r, column=1, sticky="w", pady=3)
         r += 1
 
-        # Buttons
         bf2 = tk.Frame(f, bg=TH["bg"])
         bf2.grid(row=r, column=0, columnspan=2, pady=18)
         tk.Button(bf2, text=L.t("save"), command=self._save,
@@ -956,7 +980,6 @@ class ContestEditor(tk.Toplevel):
 
     @staticmethod
     def _parse_kv(text):
-        """Parse KEY=VALUE lines into dict."""
         result = {}
         for line in text.strip().splitlines():
             line = line.strip()
@@ -995,11 +1018,9 @@ class ContestEditor(tk.Toplevel):
         self.d["use_serial"] = self._serv.get()
         self.d["use_county"] = self._couv.get()
 
-        # Categories
         cats = [c.strip() for c in self._cats_t.get("1.0", "end").splitlines() if c.strip()]
         self.d["categories"] = cats if cats else ["Individual"]
 
-        # Bands / Modes
         self.d["allowed_bands"] = [b for b, v in self._band_vars.items() if v.get()]
         self.d["allowed_modes"] = [m for m, v in self._mode_vars.items() if v.get()]
         if not self.d["allowed_bands"]:
@@ -1007,19 +1028,15 @@ class ContestEditor(tk.Toplevel):
         if not self.d["allowed_modes"]:
             self.d["allowed_modes"] = list(MODES_ALL)
 
-        # Required stations
         req = [s.strip().upper() for s in self._req_t.get("1.0", "end").splitlines() if s.strip()]
         self.d["required_stations"] = req
 
-        # Special scoring
         self.d["special_scoring"] = self._parse_kv(self._sp_t.get("1.0", "end"))
 
-        # Band points
         raw_bp = self._parse_kv(self._bp_t.get("1.0", "end"))
         self.d["band_points"] = {k: int(v) for k, v in raw_bp.items()
                                   if v.isdigit()}
 
-        # County list
         cl_raw = self._cl_e.get().strip()
         self.d["county_list"] = [c.strip().upper() for c in cl_raw.split(",")
                                    if c.strip()] if cl_raw else []
@@ -1042,6 +1059,8 @@ class ContestMgr(tk.Toplevel):
         self.grab_set()
         self._build()
         self._fill()
+        # ── FIX v16.2: center on parent ──
+        center_dialog(self, parent)
 
     def _build(self):
         tb = tk.Frame(self, bg=TH["header_bg"], pady=6)
@@ -1213,6 +1232,8 @@ class SearchDialog(tk.Toplevel):
         sb.pack(side="right", fill="y")
         tk.Button(self, text=L.t("close"), command=self.destroy,
                   bg=TH["btn_bg"], fg="white").pack(pady=8)
+        # ── FIX v16.2: center on parent ──
+        center_dialog(self, parent)
 
     def _search(self, e=None):
         q_str = self._sv.get().upper().strip()
@@ -1266,6 +1287,8 @@ class TimerDialog(tk.Toplevel):
         tk.Button(bf, text=L.t("timer_reset"), command=self._reset,
                   bg=TH["warn"], fg="white", font=("Consolas", 11), width=8).pack(side="left", padx=4)
         self._tick()
+        # ── FIX v16.2: center on parent ──
+        center_dialog(self, parent)
 
     def _start(self):
         if self._running:
@@ -1334,6 +1357,9 @@ class StatsWindow(tk.Toplevel):
         self.geometry("560x520")
         self.configure(bg=TH["bg"])
         self.transient(parent)
+        # ── FIX v16.2: center on parent ──
+        center_dialog(self, parent)
+
         txt = scrolledtext.ScrolledText(self, bg=TH["entry_bg"], fg=TH["fg"],
                                          font=("Consolas", 10), wrap="word")
         txt.pack(fill="both", expand=True, padx=10, pady=10)
@@ -1352,7 +1378,6 @@ class StatsWindow(tk.Toplevel):
         w(f"Unice / Unique: {unique}\n")
 
         if log_data:
-            # Operating time
             try:
                 dts = []
                 for q in log_data:
@@ -1373,7 +1398,6 @@ class StatsWindow(tk.Toplevel):
                 pass
 
         w("\n")
-        # Band summary
         w("─── Benzi / Bands ───\n", "h")
         bc = Counter(q.get("b", "?") for q in log_data)
         for b in BANDS_ALL:
@@ -1396,7 +1420,6 @@ class StatsWindow(tk.Toplevel):
         else:
             w("  (fără punctare / no scoring)\n", "warn")
 
-        # Required stations
         req = (rules or {}).get("required_stations", [])
         if req:
             w("\n─── Stații Obligatorii / Required ───\n", "h")
@@ -1405,7 +1428,6 @@ class StatsWindow(tk.Toplevel):
                 found = r.upper() in calls_in_log
                 w(f"  {'✓' if found else '✗'} {r}\n", "ok" if found else "err")
 
-        # Worked-All tracker
         mt = (rules or {}).get("multiplier_type", "none")
         if mt == "county":
             all_co = (rules or {}).get("county_list", YO_COUNTIES)
@@ -1436,19 +1458,20 @@ class App(tk.Tk):
         super().__init__()
         self.cfg = DM.load("config.json", DEFAULT_CFG.copy())
         self.contests = DM.load("contests.json", DEFAULT_CONTESTS.copy())
-        # Ensure defaults exist
         for k, v in DEFAULT_CONTESTS.items():
             if k not in self.contests:
                 self.contests[k] = copy.deepcopy(v)
         if self.cfg.get("contest", "") not in self.contests:
             self.cfg["contest"] = "simplu"
+        # ── FIX v16.2: ensure self.log is always a list ──
         self.log = DM.load_log(self.cfg.get("contest", "simplu"))
+        if not isinstance(self.log, list):
+            self.log = []
         L.s(self.cfg.get("lang", "ro"))
         self.edit_idx = None
         self.ent = {}
         self.serial = len(self.log) + 1
         self.undo_stack = deque(maxlen=50)
-        # UI references
         self.info_lbl = self.sc_lbl = self.clk = self.rate_lbl = None
         self.led_c = self.led = self.st_lbl = self.wb_lbl = self.log_btn = None
         self.tree = self.ctx = self.fb_v = self.fm_v = None
@@ -1469,7 +1492,6 @@ class App(tk.Tk):
         self._tick_clock()
         self._tick_save()
 
-    # ── helpers ──────────────────────────────────────────────────────────────
     def _cc(self):
         return self.contests.get(self.cfg.get("contest", "simplu"),
                                   self.contests.get("simplu", {}))
@@ -1480,7 +1502,6 @@ class App(tk.Tk):
     def _sounds(self):
         return self.cfg.get("sounds", True) and HAS_SOUND
 
-    # ── window setup ─────────────────────────────────────────────────────────
     def _setup_win(self):
         self.title(L.t("app_title"))
         self.configure(bg=TH["bg"])
@@ -1509,11 +1530,9 @@ class App(tk.Tk):
                      foreground=TH["fg"], font=self.fb)
         s.map("Treeview", background=[("selected", TH["accent"])])
 
-    # ── menu ─────────────────────────────────────────────────────────────────
     def _build_menu(self):
         mb = tk.Menu(self)
         self.config(menu=mb)
-        # Contests menu
         cm = tk.Menu(mb, tearoff=0)
         mb.add_cascade(label=L.t("contests"), menu=cm)
         cm.add_command(label=L.t("contest_mgr"), command=self._mgr)
@@ -1522,7 +1541,6 @@ class App(tk.Tk):
             nm = cd.get("name_" + L.g(), cd.get("name_ro", cid))
             cm.add_command(label=f"⚡ {nm}",
                            command=lambda c=cid: self._switch_contest(c))
-        # Tools menu
         tm = tk.Menu(mb, tearoff=0)
         mb.add_cascade(label=L.t("tools"), menu=tm)
         tm.add_command(label=L.t("search"), command=self._search_dlg)
@@ -1535,7 +1553,6 @@ class App(tk.Tk):
         tm.add_command(label=L.t("verify"), command=self._verify_hash)
         tm.add_separator()
         tm.add_command(label=L.t("clear_log"), command=self._clear_log)
-        # Help menu
         hm = tk.Menu(mb, tearoff=0)
         mb.add_cascade(label=L.t("help"), menu=hm)
         hm.add_command(label=L.t("about"), command=self._about)
@@ -1546,7 +1563,6 @@ class App(tk.Tk):
         self.ctx.add_command(label=L.t("edit_qso"), command=self._edit_sel)
         self.ctx.add_command(label=L.t("delete_qso"), command=self._del_sel)
 
-    # ── UI build ─────────────────────────────────────────────────────────────
     def _build_ui(self):
         self._build_hdr()
         self._build_inp()
@@ -1594,7 +1610,6 @@ class App(tk.Tk):
         r1 = tk.Frame(ip, bg=TH["bg"])
         r1.pack(fill="x")
         cc = self._cc()
-        # Callsign
         cf = tk.Frame(r1, bg=TH["bg"])
         cf.pack(side="left", padx=3)
         tk.Label(cf, text=L.t("call"), bg=TH["bg"], fg=TH["fg"], font=self.fb).pack()
@@ -1605,7 +1620,6 @@ class App(tk.Tk):
         self.ent["call"].bind("<KeyRelease>", self._on_call_key)
         self.wb_lbl = tk.Label(cf, text="", bg=TH["bg"], fg=TH["err"], font=("Consolas", 9))
         self.wb_lbl.pack()
-        # Frequency
         ff = tk.Frame(r1, bg=TH["bg"])
         ff.pack(side="left", padx=3)
         tk.Label(ff, text=L.t("freq"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack()
@@ -1614,7 +1628,6 @@ class App(tk.Tk):
         self.ent["freq"].pack()
         self.ent["freq"].bind("<FocusOut>", self._on_freq_out)
         self.ent["freq"].bind("<Return>", self._on_freq_enter)
-        # Band
         ab = cc.get("allowed_bands", BANDS_ALL)
         bf2 = tk.Frame(r1, bg=TH["bg"])
         bf2.pack(side="left", padx=3)
@@ -1623,7 +1636,6 @@ class App(tk.Tk):
         self.ent["band"].set(ab[0] if ab else "40m")
         self.ent["band"].pack()
         self.ent["band"].bind("<<ComboboxSelected>>", self._on_band_change)
-        # Mode
         am = cc.get("allowed_modes", MODES_ALL)
         mf2 = tk.Frame(r1, bg=TH["bg"])
         mf2.pack(side="left", padx=3)
@@ -1632,7 +1644,6 @@ class App(tk.Tk):
         self.ent["mode"].set(am[0] if am else "SSB")
         self.ent["mode"].pack()
         self.ent["mode"].bind("<<ComboboxSelected>>", self._on_mode_change)
-        # RST
         default_rst = RST_DEFAULTS.get(am[0] if am else "SSB", "59")
         for k, lb in [("rst_s", L.t("rst_s")), ("rst_r", L.t("rst_r"))]:
             frame = tk.Frame(r1, bg=TH["bg"])
@@ -1643,7 +1654,6 @@ class App(tk.Tk):
             e.insert(0, default_rst)
             e.pack()
             self.ent[k] = e
-        # Serials
         if cc.get("use_serial"):
             for k, lb in [("ss", L.t("serial_s")), ("sr", L.t("serial_r"))]:
                 frame = tk.Frame(r1, bg=TH["bg"])
@@ -1655,14 +1665,12 @@ class App(tk.Tk):
                     e.insert(0, str(self.serial))
                 e.pack()
                 self.ent[k] = e
-        # Note
         nf = tk.Frame(r1, bg=TH["bg"])
         nf.pack(side="left", padx=3)
         tk.Label(nf, text=L.t("note"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack()
         self.ent["note"] = tk.Entry(nf, width=13, bg=TH["entry_bg"], fg=TH["fg"],
                                      font=self.fn, insertbackground=TH["fg"], justify="center")
         self.ent["note"].pack()
-        # Manual / LOG / Reset
         rbf = tk.Frame(r1, bg=TH["bg"])
         rbf.pack(side="left", padx=6)
         self.man_v = tk.BooleanVar(value=self.cfg.get("manual_dt", False))
@@ -1674,7 +1682,6 @@ class App(tk.Tk):
         self.log_btn.pack(pady=1)
         tk.Button(rbf, text=L.t("reset"), command=self._clr,
                   bg=TH["btn_bg"], fg=TH["btn_fg"], font=self.fn, width=10).pack(pady=1)
-        # Row 2: date/time + category + county + save
         r2 = tk.Frame(ip, bg=TH["bg"])
         r2.pack(fill="x", pady=(6, 0))
         tk.Label(r2, text=L.t("date_l"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack(side="left", padx=3, pady=2)
@@ -1691,21 +1698,18 @@ class App(tk.Tk):
             self.ent[k].insert(0, v)
             if not self.man_v.get():
                 self.ent[k].config(state="disabled")
-        # Category
         tk.Label(r2, text=L.t("category"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack(side="left", padx=(12, 3), pady=2)
         cats = cc.get("categories", ["Individual"]) or ["Individual"]
         saved_cat = min(self.cfg.get("cat_idx", self.cfg.get("cat", 0)), max(0, len(cats)-1))
         self.cat_v = tk.StringVar(value=cats[saved_cat] if cats else "")
         ttk.Combobox(r2, textvariable=self.cat_v, values=cats,
                      state="readonly", width=20).pack(side="left", padx=2)
-        # County (only if contest uses it)
         if cc.get("use_county"):
             tk.Label(r2, text=L.t("county"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack(side="left", padx=(8, 3), pady=2)
             county_list = cc.get("county_list", YO_COUNTIES)
             self.cou_v = tk.StringVar(value=self.cfg.get("county", "NT"))
             ttk.Combobox(r2, textvariable=self.cou_v, values=county_list,
                          state="readonly", width=6).pack(side="left", padx=2)
-        # Save category/county button
         tk.Button(r2, text=L.t("save_cat"), command=self._save_cat,
                   bg=TH["btn_bg"], fg="white", font=("Consolas", 10)).pack(side="left", padx=8)
 
@@ -1799,7 +1803,6 @@ class App(tk.Tk):
             tk.Button(bb, text=txt, command=cmd, bg=col, fg="white",
                       font=("Consolas", 10), width=11).pack(side="left", padx=2)
 
-    # ── refresh / update ─────────────────────────────────────────────────────
     def _refresh(self):
         if not self.tree:
             return
@@ -1857,7 +1860,6 @@ class App(tk.Tk):
                     self.sc_lbl.config(text=f"Σ {tot}")
             else:
                 self.sc_lbl.config(text="")
-        # Rate meter
         if self.rate_lbl and len(self.log) >= 2:
             try:
                 recent = [q for q in self.log[:20]]
@@ -1882,7 +1884,6 @@ class App(tk.Tk):
         now = datetime.datetime.utcnow()
         return now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
 
-    # ── QSO operations ───────────────────────────────────────────────────────
     def _add_qso(self):
         try:
             self._do_add_qso()
@@ -1900,13 +1901,15 @@ class App(tk.Tk):
             return
         cc = self._cc()
 
-        # Guard edit_idx still valid (log may have changed)
+        # ── FIX v16.2: ensure self.log is a list before insert ──
+        if not isinstance(self.log, list):
+            self.log = list(self.log) if self.log else []
+
         if self.edit_idx is not None and self.edit_idx >= len(self.log):
             self.edit_idx = None
             if self.log_btn:
                 self.log_btn.config(text=L.t("log"), bg=TH["accent"])
 
-        # Duplicate check
         dup, di = Score.is_dup(self.log, call, band, mode, self.edit_idx)
         if dup and self.edit_idx is None:
             if self._sounds():
@@ -1916,7 +1919,6 @@ class App(tk.Tk):
                                                                len(self.log) - di)):
                 return
 
-        # New multiplier notification
         ds, ts = self._get_dt()
         q_preview = {"c": call, "b": band, "m": mode,
                       "n": self.ent["note"].get().upper().strip()}
@@ -2025,7 +2027,6 @@ class App(tk.Tk):
         self._refresh()
         DM.save_log(self._cid(), self.log)
 
-    # ── event handlers ───────────────────────────────────────────────────────
     def _on_call_key(self, e=None):
         c = self.ent["call"].get().upper()
         pos = self.ent["call"].index(tk.INSERT)
@@ -2091,7 +2092,10 @@ class App(tk.Tk):
         DM.save_log(self._cid(), self.log)
         self.cfg["contest"] = self.cv.get()
         DM.save("config.json", self.cfg)
+        # ── FIX v16.2: ensure list on contest change ──
         self.log = DM.load_log(self._cid())
+        if not isinstance(self.log, list):
+            self.log = []
         self.serial = len(self.log) + 1
         self._rebuild()
 
@@ -2139,12 +2143,14 @@ class App(tk.Tk):
         DM.save_log(self._cid(), self.log)
         self.cfg["contest"] = cid
         DM.save("config.json", self.cfg)
+        # ── FIX v16.2: ensure list on switch ──
         self.log = DM.load_log(cid)
+        if not isinstance(self.log, list):
+            self.log = []
         self.serial = len(self.log) + 1
         self._rebuild()
 
     def _rebuild(self):
-        # Save geometry
         self.cfg["win_geo"] = self.geometry()
         for w in self.winfo_children():
             w.destroy()
@@ -2159,7 +2165,6 @@ class App(tk.Tk):
         self._build_ctx()
         self._refresh()
 
-    # ── clocks / timers ──────────────────────────────────────────────────────
     def _tick_clock(self):
         try:
             if not self.winfo_exists():
@@ -2187,7 +2192,6 @@ class App(tk.Tk):
         if self._sounds():
             beep("success")
 
-    # ── dialogs ─────────────────────────────────────────────────────────────
     def _mgr(self):
         d = ContestMgr(self, self.contests)
         self.wait_window(d)
@@ -2201,19 +2205,23 @@ class App(tk.Tk):
         d.title(L.t("about"))
         d.geometry("460x280")
         d.configure(bg=TH["bg"])
-        tk.Label(d, text="📻 YO Log PRO v16.1", bg=TH["bg"], fg=TH["accent"],
+        d.transient(self)
+        tk.Label(d, text="📻 YO Log PRO v16.2", bg=TH["bg"], fg=TH["accent"],
                  font=("Consolas", 16, "bold")).pack(pady=12)
         tk.Label(d, text=L.t("credits"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack(pady=8)
         tk.Label(d, text=L.t("usage"), bg=TH["bg"], fg=TH["fg"],
                  font=("Consolas", 9)).pack(pady=6)
         tk.Button(d, text=L.t("close"), command=d.destroy,
                   bg=TH["accent"], fg="white", width=12).pack(pady=10)
+        # ── FIX v16.2: center on parent ──
+        center_dialog(d, self)
 
     def _settings(self):
         d = tk.Toplevel(self)
         d.title(L.t("settings"))
         d.geometry("420x460")
         d.configure(bg=TH["bg"])
+        d.transient(self)
         eo = {"bg": TH["entry_bg"], "fg": TH["fg"], "font": self.fn,
                "insertbackground": TH["fg"]}
         fields = [
@@ -2233,7 +2241,6 @@ class App(tk.Tk):
             e.pack(pady=2, padx=15)
             es[k] = e
 
-        # Sounds checkbox
         snd_v = tk.BooleanVar(value=self.cfg.get("sounds", True))
         tk.Checkbutton(d, text=L.t("en_sounds"), variable=snd_v,
                        bg=TH["bg"], fg=TH["fg"], selectcolor=TH["entry_bg"],
@@ -2255,6 +2262,8 @@ class App(tk.Tk):
 
         tk.Button(d, text=L.t("save"), command=save,
                   bg=TH["accent"], fg="white", width=12).pack(pady=12)
+        # ── FIX v16.2: center on parent ──
+        center_dialog(d, self)
 
     def _stats(self):
         StatsWindow(self, self.log, self._cc(), self.cfg)
@@ -2292,18 +2301,20 @@ class App(tk.Tk):
             self._refresh()
             DM.save_log(self._cid(), self.log)
 
-    # ── import ───────────────────────────────────────────────────────────────
     def _import_menu(self):
         d = tk.Toplevel(self)
         d.title(L.t("import_log"))
         d.geometry("260x150")
         d.configure(bg=TH["bg"])
+        d.transient(self)
         tk.Button(d, text="ADIF (.adi / .adif)",
                   command=lambda: [d.destroy(), self._import_adif()],
                   bg=TH["accent"], fg="white", width=22).pack(pady=8)
         tk.Button(d, text="CSV (.csv)",
                   command=lambda: [d.destroy(), self._import_csv()],
                   bg=TH["accent"], fg="white", width=22).pack(pady=8)
+        # ── FIX v16.2: center on parent ──
+        center_dialog(d, self)
 
     def _import_adif(self):
         fp = filedialog.askopenfilename(filetypes=[("ADIF", "*.adi *.adif"), ("All", "*.*")])
@@ -2312,6 +2323,9 @@ class App(tk.Tk):
                 with open(fp, "r", encoding="utf-8", errors="replace") as f:
                     qsos = Importer.parse_adif(f.read())
                 if qsos:
+                    # ── FIX v16.2: ensure list before extend ──
+                    if not isinstance(self.log, list):
+                        self.log = []
                     self.log.extend(qsos)
                     self._refresh()
                     DM.save_log(self._cid(), self.log)
@@ -2328,6 +2342,9 @@ class App(tk.Tk):
                 with open(fp, "r", encoding="utf-8", errors="replace") as f:
                     qsos = Importer.parse_csv(f.read())
                 if qsos:
+                    # ── FIX v16.2: ensure list before extend ──
+                    if not isinstance(self.log, list):
+                        self.log = []
                     self.log.extend(qsos)
                     self._refresh()
                     DM.save_log(self._cid(), self.log)
@@ -2337,12 +2354,12 @@ class App(tk.Tk):
             except Exception as e:
                 messagebox.showerror(L.t("error"), str(e))
 
-    # ── export ───────────────────────────────────────────────────────────────
     def _export_dlg(self):
         d = tk.Toplevel(self)
         d.title(L.t("export"))
         d.geometry("260x220")
         d.configure(bg=TH["bg"])
+        d.transient(self)
         for txt, cmd in [
             ("Cabrillo 3.0 (.log)", lambda: self._exp_cab(d)),
             ("ADIF 3.1 (.adi)",     lambda: self._exp_adif(d)),
@@ -2352,6 +2369,8 @@ class App(tk.Tk):
         ]:
             tk.Button(d, text=txt, command=cmd,
                       bg=TH["accent"], fg="white", width=24).pack(pady=4)
+        # ── FIX v16.2: center on parent ──
+        center_dialog(d, self)
 
     def _exp_cab(self, parent=None):
         try:
@@ -2377,8 +2396,8 @@ class App(tk.Tk):
                 f"CATEGORY-MODE: MIXED",
                 f"NAME: {self.cfg.get('op_name', '')}",
                 f"ADDRESS: {self.cfg.get('addr', '')}",
-                f"SOAPBOX: Logged with YO Log PRO v16.1",
-                "CREATED-BY: YO Log PRO v16.1",
+                f"SOAPBOX: Logged with YO Log PRO v16.2",
+                "CREATED-BY: YO Log PRO v16.2",
             ]
             for q in self.log:
                 freq = q.get("f", "") or str(BAND_FREQ.get(q.get("b", ""), 0))
@@ -2412,7 +2431,7 @@ class App(tk.Tk):
             lines = [
                 "<ADIF_VER:5>3.1.0",
                 f"<PROGRAMID:14>YO_Log_PRO_v16",
-                "<PROGRAMVERSION:5>16.1",
+                "<PROGRAMVERSION:5>16.2",
                 f"<MY_GRIDSQUARE:{len(my_loc)}>{my_loc}",
                 "<EOH>",
             ]
@@ -2427,7 +2446,6 @@ class App(tk.Tk):
                 note = q.get("n", "")
                 ss = q.get("ss", "")
                 sr = q.get("sr", "")
-                # Frequency in MHz
                 freq_khz = q.get("f", "")
                 freq_mhz = ""
                 if freq_khz:
@@ -2515,11 +2533,11 @@ class App(tk.Tk):
                 f"PBand=144",
                 f"PSect=",
                 "[Remarks]",
-                "Logged with YO Log PRO v16.1",
+                "Logged with YO Log PRO v16.2",
                 "[QSORecords]",
             ]
             for q in self.log:
-                dt = q.get("d", "").replace("-", "")[2:]  # YYMMDD
+                dt = q.get("d", "").replace("-", "")[2:]
                 tm = q.get("t", "").replace(":", "")[:4]
                 call = q.get("c", "")
                 rst_s = q.get("s", "59")
@@ -2549,7 +2567,7 @@ class App(tk.Tk):
             nm = cc.get("name_" + L.g(), cc.get("name_ro", "?"))
             lines = [
                 f"{'=' * 90}",
-                f"YO Log PRO v16.1  —  {my}  —  {nm}",
+                f"YO Log PRO v16.2  —  {my}  —  {nm}",
                 f"Generat / Generated: {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC",
                 f"{'=' * 90}",
                 f"{'Nr':<4} {'Call':<13} {'Freq':<8} {'Band':<6} {'Mode':<6} "
@@ -2581,7 +2599,6 @@ class App(tk.Tk):
     def _print_log(self):
         self._exp_print()
 
-    # ── backup ───────────────────────────────────────────────────────────────
     def _bak(self):
         if DM.backup(self._cid(), self.log):
             messagebox.showinfo("OK", L.t("bak_ok"))
