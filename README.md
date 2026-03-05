@@ -6,7 +6,7 @@
 
 ## 📥 Descărcare / Download
 
-Mergi la [**Releases**](../../releases) și descarcă `YO_Log_PRO_v16.5.exe`
+Mergi la [**Releases**](../../releases) și descarcă `YO_Log_PRO_v16.5`
 
 > ✅ **Nu necesită instalare Python** — executabil standalone  
 > ✅ **Dacă apare eroare DLL: instalează [vcredist\_x64.exe](https://aka.ms/vs/17/release/vc_redist.x64.exe)**
