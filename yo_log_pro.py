@@ -1,42 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-YO Log PRO v16.3 FINAL — Professional Multi-Contest Amateur Radio Logger
+YO Log PRO v16.4 FINAL — Professional Multi-Contest Amateur Radio Logger
 Developed by: Ardei Constantin-Cătălin (YO8ACR)
 Email: yo8acr@gmail.com
 
-FIXES v16.3:
-- ADDED: Cabrillo 2.0 export (compatible with LOGIX and similar programs)
-- ADDED: Email field in settings
-- ADDED: Mode mapping PH/CW/RY/DG for Cabrillo 2.0
-- ADDED: CATEGORY as single number, CLAIMED-SCORE, CREATED BY (no hyphen)
-- ADDED: Date format YYYY-MM-DD in Cabrillo 2.0 QSO lines
-- ADDED: Exchange sent/received with county/serial/"--" fallback
-
-FIXES v16.2:
-- FIXED: 'dict' object has no attribute 'insert' — DM.load() returned {} instead of []
-- FIXED: All popup dialogs now center on parent window
-- ContestEditor: fields for categories, bands, modes, required_stations, special_scoring, band_points, county_list fully editable
-- ContestMgr: Duplicate + Export + Import buttons added
-- Stats window: full detailed stats (bands, modes, DXCC, worked-all, operating time, rate)
-- Cabrillo export: full 3.0 header with CONTEST, CATEGORY-*, NAME, ADDRESS, SOAPBOX
-- ADIF export: FREQ in MHz, GRIDSQUARE, MY_GRIDSQUARE, STX, SRX
-- EDI export: added
-- Print text export: added
-- Validate: improved messages, checks forbidden bands/modes
-- Score label: shows Σ QSO×MULT=TOTAL format
-- Worked-before indicator: shows worked other band/mode in yellow
-- Search dialog: Ctrl+F, live filter
-- Timer dialog: contest countdown
-- Hash verify: MD5 check
-- Sound: beep on new multiplier, duplicate
-- Settings: addr, font size, sounds checkbox
-- Config: category/county save button fixed
-- Rate meter: QSO/h live
-- Geometry save/restore
-- Scrollbar on ContestEditor (tall form)
-- Auto-RST on band change fix
-- Clear log with backup
+FIXES v16.4:
+- ADDED: Save dialog for all exports (user chooses location)
+- ADDED: Import Cabrillo 2.0 and 3.0 formats
+- ADDED: cabrillo_name field in contest editor (official contest name for export)
+- ADDED: exchange_format field per contest (county/grid/zone/serial/none)
+- ADDED: Soapbox editable in settings
+- ADDED: Validation before export with warning
+- ADDED: Auto-backup before export
+- ADDED: Preview dialog before Cabrillo export
+- ADDED: Confirmation on contest switch
+- ADDED: Frequency integer formatting in Cabrillo 2.0
+- ADDED: Sequential QSO numbering in Cabrillo
+- FIXED: All exports now use filedialog.asksaveasfilename()
 """
 
 import os
@@ -80,9 +61,7 @@ def beep(kind="info"):
         pass
 
 
-# ─── CENTER DIALOG HELPER ───────────────────────────────────────────────────
 def center_dialog(dialog, parent=None):
-    """Center a Toplevel dialog on its parent window."""
     dialog.update_idletasks()
     geo = dialog.geometry()
     m = re.match(r'(\d+)x(\d+)', geo)
@@ -103,12 +82,9 @@ def center_dialog(dialog, parent=None):
         sh = dialog.winfo_screenheight()
         x = (sw - dw) // 2
         y = (sh - dh) // 2
-    x = max(0, x)
-    y = max(0, y)
-    dialog.geometry(f"{dw}x{dh}+{x}+{y}")
+    dialog.geometry(f"{dw}x{dh}+{max(0,x)}+{max(0,y)}")
 
 
-# ─── Maidenhead / Haversine ─────────────────────────────────────────────────
 class Loc:
     @staticmethod
     def to_latlon(loc):
@@ -157,7 +133,6 @@ class Loc:
         return False
 
 
-# ─── DXCC Database ───────────────────────────────────────────────────────────
 class DXCC:
     DB = {
         "YO": "Romania", "YP": "Romania", "YQ": "Romania", "YR": "Romania",
@@ -240,7 +215,6 @@ class DXCC:
         return p
 
 
-# ─── Frequency / Band maps ───────────────────────────────────────────────────
 FREQ_MAP = {
     (1800, 2000): "160m", (3500, 3800): "80m", (5351, 5367): "60m",
     (7000, 7200): "40m", (10100, 10150): "30m", (14000, 14350): "20m",
@@ -261,6 +235,18 @@ RST_DEFAULTS = {
     "FT8": "-10", "FT4": "-10", "JT65": "-15",
 }
 
+CAB2_MODE_MAP = {
+    "SSB": "PH", "AM": "PH", "FM": "PH", "SSTV": "PH",
+    "CW": "CW",
+    "RTTY": "RY", "PSK31": "RY",
+    "FT8": "DG", "FT4": "DG", "JT65": "DG", "DIGI": "DG",
+}
+
+CAB2_MODE_REV = {v: k for k, v in CAB2_MODE_MAP.items()}
+CAB2_MODE_REV["PH"] = "SSB"
+CAB2_MODE_REV["RY"] = "RTTY"
+CAB2_MODE_REV["DG"] = "FT8"
+
 
 def freq2band(f):
     try:
@@ -279,6 +265,7 @@ BANDS_UHF = ["70cm", "23cm"]
 BANDS_ALL = BANDS_HF + BANDS_VHF + BANDS_UHF
 MODES_ALL = ["SSB", "CW", "DIGI", "FT8", "FT4", "RTTY", "AM", "FM", "PSK31", "SSTV", "JT65"]
 SCORING_MODES = ["none", "per_qso", "per_band", "maraton", "multiplier", "distance", "custom"]
+EXCHANGE_FORMATS = ["none", "county", "grid", "serial", "zone", "custom"]
 CONTEST_TYPES = ["Simplu", "Maraton", "Stafeta", "YO", "DX", "VHF", "UHF",
                  "Field Day", "Sprint", "QSO Party", "SOTA", "POTA", "Custom"]
 YO_COUNTIES = ["AB", "AR", "AG", "BC", "BH", "BN", "BT", "BV", "BR", "BZ",
@@ -286,19 +273,9 @@ YO_COUNTIES = ["AB", "AR", "AG", "BC", "BH", "BN", "BT", "BV", "BR", "BZ",
                "HR", "HD", "IL", "IS", "IF", "MM", "MH", "MS", "NT", "OT",
                "PH", "SM", "SJ", "SB", "SV", "TR", "TM", "TL", "VS", "VL", "VN", "B"]
 
-# ─── Cabrillo 2.0 Mode Mapping ───────────────────────────────────────────────
-CAB2_MODE_MAP = {
-    "SSB": "PH", "AM": "PH", "FM": "PH", "SSTV": "PH",
-    "CW": "CW",
-    "RTTY": "RY", "PSK31": "RY",
-    "FT8": "DG", "FT4": "DG", "JT65": "DG", "DIGI": "DG",
-}
-
-
-# ─── Translations ─────────────────────────────────────────────────────────────
 T = {
     "ro": {
-        "app_title": "YO Log PRO v16.3", "call": "Indicativ", "band": "Bandă", "mode": "Mod",
+        "app_title": "YO Log PRO v16.4", "call": "Indicativ", "band": "Bandă", "mode": "Mod",
         "rst_s": "RST S", "rst_r": "RST R", "serial_s": "Nr S", "serial_r": "Nr R",
         "freq": "Frecv (kHz)", "note": "Notă/Locator", "log": "LOG", "update": "ACTUALIZEAZĂ",
         "search": "🔍 Caută", "reset": "Reset", "settings": "⚙ Setări",
@@ -356,9 +333,19 @@ T = {
         "exp_cab2": "Cabrillo 2.0 (.log)",
         "email_l": "Email:",
         "soapbox": "SOAPBOX:",
+        "cab_name": "Nume Cabrillo:",
+        "exch_fmt": "Format Exchange:",
+        "soapbox_l": "Soapbox:",
+        "imp_cab": "Import Cabrillo",
+        "preview": "👁 Previzualizare",
+        "preview_t": "Previzualizare Export",
+        "exp_warn": "⚠ Atenție!",
+        "exp_warn_msg": "Logul are probleme:\n{}\n\nContinuați exportul?",
+        "switch_conf": "Schimbați concursul?\nLogul curent va fi salvat.",
+        "exp_backup": "Backup creat automat înainte de export.",
     },
     "en": {
-        "app_title": "YO Log PRO v16.3", "call": "Callsign", "band": "Band", "mode": "Mode",
+        "app_title": "YO Log PRO v16.4", "call": "Callsign", "band": "Band", "mode": "Mode",
         "rst_s": "RST S", "rst_r": "RST R", "serial_s": "Nr S", "serial_r": "Nr R",
         "freq": "Freq (kHz)", "note": "Note/Locator", "log": "LOG", "update": "UPDATE",
         "search": "🔍 Search", "reset": "Reset", "settings": "⚙ Settings",
@@ -418,39 +405,55 @@ T = {
         "exp_cab2": "Cabrillo 2.0 (.log)",
         "email_l": "Email:",
         "soapbox": "SOAPBOX:",
+        "cab_name": "Cabrillo Name:",
+        "exch_fmt": "Exchange Format:",
+        "soapbox_l": "Soapbox:",
+        "imp_cab": "Import Cabrillo",
+        "preview": "👁 Preview",
+        "preview_t": "Export Preview",
+        "exp_warn": "⚠ Warning!",
+        "exp_warn_msg": "Log has issues:\n{}\n\nContinue export?",
+        "switch_conf": "Switch contest?\nCurrent log will be saved.",
+        "exp_backup": "Auto-backup created before export.",
     }
 }
 
-# ─── Default Contests ────────────────────────────────────────────────────────
 DEFAULT_CONTESTS = {
     "simplu": {
         "name_ro": "Log Simplu", "name_en": "Simple Log", "contest_type": "Simplu",
+        "cabrillo_name": "Simple Log",
         "categories": ["Individual"], "scoring_mode": "none", "points_per_qso": 1,
         "min_qso": 0, "allowed_bands": list(BANDS_ALL), "allowed_modes": list(MODES_ALL),
         "required_stations": [], "special_scoring": {}, "use_serial": False,
         "use_county": False, "county_list": [], "multiplier_type": "none",
-        "band_points": {}, "is_default": True
+        "band_points": {}, "exchange_format": "none", "is_default": True
     },
     "maraton": {
-        "name_ro": "Maraton", "name_en": "Marathon", "contest_type": "Maraton",
+        "name_ro": "Maraton Ion Creangă", "name_en": "Marathon Ion Creanga",
+        "contest_type": "Maraton",
+        "cabrillo_name": "MARATON ION CREANGA",
         "categories": ["A. Seniori YO", "B. YL", "C. Juniori YO", "D. Club", "E. DX", "F. Receptori"],
         "scoring_mode": "maraton", "points_per_qso": 1, "min_qso": 100,
         "allowed_bands": BANDS_HF + BANDS_VHF, "allowed_modes": list(MODES_ALL),
         "required_stations": [], "special_scoring": {}, "use_serial": False,
         "use_county": True, "county_list": list(YO_COUNTIES),
-        "multiplier_type": "county", "band_points": {}, "is_default": False
+        "multiplier_type": "county", "band_points": {},
+        "exchange_format": "county", "is_default": False
     },
     "stafeta": {
         "name_ro": "Ștafetă", "name_en": "Relay", "contest_type": "Stafeta",
+        "cabrillo_name": "STAFETA",
         "categories": ["A. Senior", "B. YL", "C. Junior"],
         "scoring_mode": "per_qso", "points_per_qso": 2, "min_qso": 50,
         "allowed_bands": BANDS_HF, "allowed_modes": ["SSB", "CW"],
         "required_stations": [], "special_scoring": {}, "use_serial": True,
         "use_county": True, "county_list": list(YO_COUNTIES),
-        "multiplier_type": "county", "band_points": {}, "is_default": False
+        "multiplier_type": "county", "band_points": {},
+        "exchange_format": "county", "is_default": False
     },
     "yo-dx-hf": {
         "name_ro": "YO DX HF Contest", "name_en": "YO DX HF Contest", "contest_type": "DX",
+        "cabrillo_name": "YO DX HF",
         "categories": ["A. SO AB High", "B. SO AB Low", "C. SO SB"],
         "scoring_mode": "per_band", "points_per_qso": 1, "min_qso": 0,
         "allowed_bands": ["160m", "80m", "40m", "20m", "15m", "10m"],
@@ -459,34 +462,40 @@ DEFAULT_CONTESTS = {
         "use_county": True, "county_list": list(YO_COUNTIES),
         "multiplier_type": "dxcc",
         "band_points": {"160m": 4, "80m": 3, "40m": 2, "20m": 1, "15m": 1, "10m": 2},
-        "is_default": False
+        "exchange_format": "serial", "is_default": False
     },
     "yo-vhf": {
         "name_ro": "YO VHF Contest", "name_en": "YO VHF Contest", "contest_type": "VHF",
+        "cabrillo_name": "YO VHF",
         "categories": ["A. Fixed", "B. Mobile", "C. Portable"],
         "scoring_mode": "distance", "points_per_qso": 1, "min_qso": 0,
         "allowed_bands": ["6m", "2m", "70cm", "23cm"], "allowed_modes": ["SSB", "CW", "FM"],
         "required_stations": [], "special_scoring": {}, "use_serial": True,
         "use_county": False, "county_list": [],
-        "multiplier_type": "grid", "band_points": {}, "is_default": False
+        "multiplier_type": "grid", "band_points": {},
+        "exchange_format": "grid", "is_default": False
     },
     "field-day": {
         "name_ro": "Field Day", "name_en": "Field Day", "contest_type": "Field Day",
+        "cabrillo_name": "FIELD DAY",
         "categories": ["1A", "2A", "3A", "1B", "2B"],
         "scoring_mode": "per_qso", "points_per_qso": 2, "min_qso": 0,
         "allowed_bands": list(BANDS_HF), "allowed_modes": list(MODES_ALL),
         "required_stations": [], "special_scoring": {}, "use_serial": False,
         "use_county": False, "county_list": [],
-        "multiplier_type": "none", "band_points": {}, "is_default": False
+        "multiplier_type": "none", "band_points": {},
+        "exchange_format": "none", "is_default": False
     },
     "sprint": {
         "name_ro": "Sprint", "name_en": "Sprint", "contest_type": "Sprint",
+        "cabrillo_name": "SPRINT",
         "categories": ["A. Single Op", "B. Multi Op"],
         "scoring_mode": "per_qso", "points_per_qso": 1, "min_qso": 0,
         "allowed_bands": ["40m", "20m", "15m", "10m"], "allowed_modes": ["SSB", "CW"],
         "required_stations": [], "special_scoring": {}, "use_serial": True,
         "use_county": False, "county_list": [],
-        "multiplier_type": "none", "band_points": {}, "is_default": False
+        "multiplier_type": "none", "band_points": {},
+        "exchange_format": "serial", "is_default": False
     },
 }
 
@@ -495,7 +504,7 @@ DEFAULT_CFG = {
     "cat": 0, "fs": 11, "contest": "simplu", "county": "NT",
     "lang": "ro", "manual_dt": False, "sounds": True,
     "op_name": "", "power": "100", "win_geo": "",
-    "email": ""
+    "email": "", "soapbox": "73 GL"
 }
 
 TH = {
@@ -509,7 +518,6 @@ TH = {
 }
 
 
-# ─── Data Manager ─────────────────────────────────────────────────────────────
 class DM:
     @staticmethod
     def fp(fn):
@@ -580,7 +588,6 @@ class DM:
             return False
 
 
-# ─── Language ─────────────────────────────────────────────────────────────────
 class L:
     _c = "ro"
 
@@ -598,7 +605,6 @@ class L:
         return T.get(cls._c, {}).get(k, k)
 
 
-# ─── Score Engine ─────────────────────────────────────────────────────────────
 class Score:
     @staticmethod
     def qso(q, rules, cfg=None):
@@ -678,7 +684,6 @@ class Score:
 
     @staticmethod
     def worked_other(data, call, band, mode):
-        """Returns True if call was worked on a different band or mode."""
         cu = call.upper()
         for q in data:
             if q.get("c", "").upper() == cu:
@@ -750,7 +755,6 @@ class Score:
         return True, f"✓ OK! {len(data)} QSO — Scor/Score: {tot}", tot
 
 
-# ─── Importer ─────────────────────────────────────────────────────────────────
 class Importer:
     @staticmethod
     def parse_adif(text):
@@ -827,8 +831,122 @@ class Importer:
             pass
         return qsos
 
+    @staticmethod
+    def parse_cabrillo(text):
+        """Parse Cabrillo 2.0 and 3.0 format logs."""
+        qsos = []
+        lines = text.strip().splitlines()
+        version = "3.0"
+        for line in lines:
+            line = line.strip()
+            if line.upper().startswith("START-OF-LOG:"):
+                ver_str = line.split(":", 1)[1].strip()
+                if ver_str:
+                    version = ver_str
+            if not line.upper().startswith("QSO:"):
+                continue
+            parts = line[4:].strip()
+            if version.startswith("2"):
+                q = Importer._parse_cab2_qso(parts)
+            else:
+                q = Importer._parse_cab3_qso(parts)
+            if q:
+                qsos.append(q)
+        return qsos
 
-# ─── Contest Editor (full fields, scrollable) ─────────────────────────────────
+    @staticmethod
+    def _parse_cab2_qso(parts):
+        """Parse a Cabrillo 2.0 QSO line.
+        Format: freq mode date time mycall rs exc theircall rs exc
+        Example: 3500 PH 2026-03-05 0530 YO8KZG 59 -- AAA 59 --
+        """
+        try:
+            tokens = parts.split()
+            if len(tokens) < 8:
+                return None
+            freq = tokens[0]
+            mode_cab = tokens[1].upper()
+            date_str = tokens[2]
+            time_str = tokens[3]
+            # mycall = tokens[4]  # skip sender
+            rst_s = tokens[5] if len(tokens) > 5 else "59"
+            exch_s = tokens[6] if len(tokens) > 6 else ""
+            call = tokens[7] if len(tokens) > 7 else ""
+            rst_r = tokens[8] if len(tokens) > 8 else "59"
+            exch_r = tokens[9] if len(tokens) > 9 else ""
+
+            if not call or call == "--":
+                return None
+
+            mode = CAB2_MODE_REV.get(mode_cab, "SSB")
+            if len(date_str) == 10 and "-" in date_str:
+                d = date_str
+            elif len(date_str) == 8:
+                d = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+            else:
+                d = date_str
+            t = f"{time_str[:2]}:{time_str[2:4]}" if len(time_str) >= 4 else time_str
+
+            band = freq2band(freq) or "40m"
+            note = exch_r if exch_r and exch_r != "--" else ""
+
+            return {
+                "c": call.upper(), "b": band, "m": mode,
+                "s": rst_s, "r": rst_r, "d": d, "t": t,
+                "f": freq, "n": note, "ss": exch_s if exch_s != "--" else "",
+                "sr": exch_r if exch_r != "--" else ""
+            }
+        except Exception:
+            return None
+
+    @staticmethod
+    def _parse_cab3_qso(parts):
+        """Parse a Cabrillo 3.0 QSO line.
+        Format: freq mode date time mycall rst exch theircall rst exch
+        Example:   1850 SSB   20260305 0528 YO8ACR 59 AAA 59
+        """
+        try:
+            tokens = parts.split()
+            if len(tokens) < 7:
+                return None
+            freq = tokens[0]
+            mode = tokens[1].upper()
+            date_str = tokens[2]
+            time_str = tokens[3]
+            # mycall = tokens[4]  # skip sender
+            rst_s = tokens[5] if len(tokens) > 5 else "59"
+            exch_s = tokens[6] if len(tokens) > 6 else ""
+
+            call = ""
+            rst_r = "59"
+            exch_r = ""
+            if len(tokens) > 7:
+                call = tokens[7]
+            if len(tokens) > 8:
+                rst_r = tokens[8]
+            if len(tokens) > 9:
+                exch_r = tokens[9]
+
+            if not call:
+                return None
+
+            if len(date_str) == 8 and "-" not in date_str:
+                d = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:8]}"
+            else:
+                d = date_str
+            t = f"{time_str[:2]}:{time_str[2:4]}" if len(time_str) >= 4 else time_str
+
+            band = freq2band(freq) or "40m"
+
+            return {
+                "c": call.upper(), "b": band, "m": mode,
+                "s": rst_s, "r": rst_r, "d": d, "t": t,
+                "f": freq, "n": exch_r, "ss": exch_s, "sr": exch_r
+            }
+        except Exception:
+            return None
+
+
 class ContestEditor(tk.Toplevel):
     def __init__(self, parent, cid=None, cdata=None, all_c=None):
         super().__init__(parent)
@@ -838,15 +956,17 @@ class ContestEditor(tk.Toplevel):
         self.all_c = all_c or {}
         self.d = copy.deepcopy(cdata) if cdata else {
             "name_ro": "", "name_en": "", "contest_type": "Simplu",
+            "cabrillo_name": "",
             "categories": ["Individual"], "scoring_mode": "none",
             "points_per_qso": 1, "min_qso": 0,
             "allowed_bands": list(BANDS_ALL), "allowed_modes": list(MODES_ALL),
             "required_stations": [], "special_scoring": {},
             "use_serial": False, "use_county": False, "county_list": [],
-            "multiplier_type": "none", "band_points": {}, "is_default": False
+            "multiplier_type": "none", "band_points": {},
+            "exchange_format": "none", "is_default": False
         }
         self.title(L.t("edit_c") if not self.new else L.t("add_c"))
-        self.geometry("720x820")
+        self.geometry("720x880")
         self.configure(bg=TH["bg"])
         self.transient(parent)
         self.grab_set()
@@ -894,6 +1014,14 @@ class ContestEditor(tk.Toplevel):
             self._e[k] = e
             r += 1
 
+        # ── NEW: Cabrillo Name ──
+        tk.Label(f, text=L.t("cab_name"), **lo).grid(row=r, column=0, sticky="w", pady=3)
+        e = tk.Entry(f, width=40, **eo)
+        e.insert(0, self.d.get("cabrillo_name", ""))
+        e.grid(row=r, column=1, sticky="w", pady=3)
+        self._e["cabrillo_name"] = e
+        r += 1
+
         tk.Label(f, text=L.t("c_type"), **lo).grid(row=r, column=0, sticky="w", pady=3)
         self._tv = tk.StringVar(value=self.d.get("contest_type", "Simplu"))
         ttk.Combobox(f, textvariable=self._tv, values=CONTEST_TYPES,
@@ -903,6 +1031,13 @@ class ContestEditor(tk.Toplevel):
         tk.Label(f, text=L.t("sc_mode"), **lo).grid(row=r, column=0, sticky="w", pady=3)
         self._sv = tk.StringVar(value=self.d.get("scoring_mode", "none"))
         ttk.Combobox(f, textvariable=self._sv, values=SCORING_MODES,
+                     state="readonly", width=18).grid(row=r, column=1, sticky="w", pady=3)
+        r += 1
+
+        # ── NEW: Exchange Format ──
+        tk.Label(f, text=L.t("exch_fmt"), **lo).grid(row=r, column=0, sticky="w", pady=3)
+        self._efv = tk.StringVar(value=self.d.get("exchange_format", "none"))
+        ttk.Combobox(f, textvariable=self._efv, values=EXCHANGE_FORMATS,
                      state="readonly", width=18).grid(row=r, column=1, sticky="w", pady=3)
         r += 1
 
@@ -1023,8 +1158,10 @@ class ContestEditor(tk.Toplevel):
 
         self.d["name_ro"] = self._e["name_ro"].get().strip()
         self.d["name_en"] = self._e["name_en"].get().strip()
+        self.d["cabrillo_name"] = self._e["cabrillo_name"].get().strip()
         self.d["contest_type"] = self._tv.get()
         self.d["scoring_mode"] = self._sv.get()
+        self.d["exchange_format"] = self._efv.get()
         try:
             self.d["points_per_qso"] = int(self._e["points_per_qso"].get())
         except Exception:
@@ -1049,12 +1186,10 @@ class ContestEditor(tk.Toplevel):
 
         req = [s.strip().upper() for s in self._req_t.get("1.0", "end").splitlines() if s.strip()]
         self.d["required_stations"] = req
-
         self.d["special_scoring"] = self._parse_kv(self._sp_t.get("1.0", "end"))
 
         raw_bp = self._parse_kv(self._bp_t.get("1.0", "end"))
-        self.d["band_points"] = {k: int(v) for k, v in raw_bp.items()
-                                  if v.isdigit()}
+        self.d["band_points"] = {k: int(v) for k, v in raw_bp.items() if v.isdigit()}
 
         cl_raw = self._cl_e.get().strip()
         self.d["county_list"] = [c.strip().upper() for c in cl_raw.split(",")
@@ -1065,7 +1200,6 @@ class ContestEditor(tk.Toplevel):
         self.destroy()
 
 
-# ─── Contest Manager ──────────────────────────────────────────────────────────
 class ContestMgr(tk.Toplevel):
     def __init__(self, parent, contests):
         super().__init__(parent)
@@ -1084,16 +1218,12 @@ class ContestMgr(tk.Toplevel):
         tb = tk.Frame(self, bg=TH["header_bg"], pady=6)
         tb.pack(fill="x")
         for txt, cmd in [
-            (L.t("add_c"), self._add),
-            (L.t("edit_c"), self._edit),
-            (L.t("dup_c"), self._dup),
-            (L.t("del_c"), self._del),
-            (L.t("exp_c"), self._export),
-            (L.t("imp_c"), self._import),
+            (L.t("add_c"), self._add), (L.t("edit_c"), self._edit),
+            (L.t("dup_c"), self._dup), (L.t("del_c"), self._del),
+            (L.t("exp_c"), self._export), (L.t("imp_c"), self._import),
         ]:
             tk.Button(tb, text=txt, command=cmd,
                       bg=TH["accent"], fg="white", font=("Consolas", 10)).pack(side="left", padx=3)
-
         tf = tk.Frame(self, bg=TH["bg"])
         tf.pack(fill="both", expand=True, padx=6, pady=3)
         cols = ("id", "name", "type", "sc", "mult", "minq")
@@ -1108,7 +1238,6 @@ class ContestMgr(tk.Toplevel):
         self.tree.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
         self.tree.bind("<Double-1>", lambda e: self._edit())
-
         bt = tk.Frame(self, bg=TH["bg"], pady=6)
         bt.pack(fill="x")
         tk.Button(bt, text=L.t("save"), command=self._onsave,
@@ -1179,10 +1308,8 @@ class ContestMgr(tk.Toplevel):
 
     def _export(self):
         fp = filedialog.asksaveasfilename(
-            defaultextension=".json",
-            filetypes=[("JSON", "*.json")],
-            initialfile=f"contests_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.json"
-        )
+            defaultextension=".json", filetypes=[("JSON", "*.json")],
+            initialfile=f"contests_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.json")
         if fp:
             try:
                 with open(fp, "w", encoding="utf-8") as f:
@@ -1215,7 +1342,6 @@ class ContestMgr(tk.Toplevel):
         self.destroy()
 
 
-# ─── Search Dialog ────────────────────────────────────────────────────────────
 class SearchDialog(tk.Toplevel):
     def __init__(self, parent, log_data):
         super().__init__(parent)
@@ -1271,7 +1397,6 @@ class SearchDialog(tk.Toplevel):
                                      q.get("d"), q.get("n")))
 
 
-# ─── Timer Dialog ─────────────────────────────────────────────────────────────
 class TimerDialog(tk.Toplevel):
     def __init__(self, parent):
         super().__init__(parent)
@@ -1365,7 +1490,6 @@ class TimerDialog(tk.Toplevel):
             pass
 
 
-# ─── Stats Window ─────────────────────────────────────────────────────────────
 class StatsWindow(tk.Toplevel):
     def __init__(self, parent, log_data, rules, cfg):
         super().__init__(parent)
@@ -1412,8 +1536,7 @@ class StatsWindow(tk.Toplevel):
             except Exception:
                 pass
 
-        w("\n")
-        w("─── Benzi / Bands ───\n", "h")
+        w("\n─── Benzi / Bands ───\n", "h")
         bc = Counter(q.get("b", "?") for q in log_data)
         for b in BANDS_ALL:
             if b in bc:
@@ -1467,12 +1590,40 @@ class StatsWindow(tk.Toplevel):
                   bg=TH["btn_bg"], fg="white", font=("Consolas", 10)).pack(pady=6)
 
 
+# ─── Preview Dialog ──────────────────────────────────────────────────────────
+class PreviewDialog(tk.Toplevel):
+    """Preview export content before saving."""
+    def __init__(self, parent, title_str, content, save_callback):
+        super().__init__(parent)
+        self.title(title_str)
+        self.geometry("750x550")
+        self.configure(bg=TH["bg"])
+        self.transient(parent)
+        self._save_cb = save_callback
+        self._content = content
+        txt = scrolledtext.ScrolledText(self, bg=TH["entry_bg"], fg=TH["fg"],
+                                         font=("Consolas", 10), wrap="none")
+        txt.pack(fill="both", expand=True, padx=10, pady=10)
+        txt.insert("1.0", content)
+        txt.config(state="disabled")
+        bf = tk.Frame(self, bg=TH["bg"])
+        bf.pack(pady=8)
+        tk.Button(bf, text=L.t("save"), command=self._on_save,
+                  bg=TH["ok"], fg="white", font=("Consolas", 12, "bold"), width=12).pack(side="left", padx=8)
+        tk.Button(bf, text=L.t("cancel"), command=self.destroy,
+                  bg=TH["btn_bg"], fg="white", font=("Consolas", 12), width=12).pack(side="left", padx=8)
+        center_dialog(self, parent)
+
+    def _on_save(self):
+        self._save_cb(self._content)
+        self.destroy()
+
+
 # ─── Main Application ─────────────────────────────────────────────────────────
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.cfg = DM.load("config.json", DEFAULT_CFG.copy())
-        # ── Ensure new config keys exist ──
         for k, v in DEFAULT_CFG.items():
             if k not in self.cfg:
                 self.cfg[k] = v
@@ -1480,6 +1631,11 @@ class App(tk.Tk):
         for k, v in DEFAULT_CONTESTS.items():
             if k not in self.contests:
                 self.contests[k] = copy.deepcopy(v)
+            else:
+                # Ensure new fields exist in existing contests
+                for fk, fv in v.items():
+                    if fk not in self.contests[k]:
+                        self.contests[k][fk] = fv
         if self.cfg.get("contest", "") not in self.contests:
             self.cfg["contest"] = "simplu"
         self.log = DM.load_log(self.cfg.get("contest", "simplu"))
@@ -1566,6 +1722,7 @@ class App(tk.Tk):
         tm.add_separator()
         tm.add_command(label=L.t("imp_adif"), command=self._import_adif)
         tm.add_command(label=L.t("imp_csv"), command=self._import_csv)
+        tm.add_command(label=L.t("imp_cab"), command=self._import_cabrillo)
         tm.add_separator()
         tm.add_command(label=L.t("print_log"), command=self._print_log)
         tm.add_command(label=L.t("verify"), command=self._verify_hash)
@@ -1772,8 +1929,7 @@ class App(tk.Tk):
             wids.append(50)
         self.tree = ttk.Treeview(tf, columns=cols, show="headings", selectmode="extended")
         for c, h, w in zip(cols, hdrs, wids):
-            self.tree.heading(c, text=h,
-                               command=lambda col=c: self._sort_tree(col))
+            self.tree.heading(c, text=h, command=lambda col=c: self._sort_tree(col))
             self.tree.column(c, width=w, anchor="center")
         self.tree.tag_configure("dup", background=TH["dup_bg"])
         self.tree.tag_configure("alt", background=TH["alt"])
@@ -1867,8 +2023,7 @@ class App(tk.Tk):
         nm = cc.get("name_" + L.g(), cc.get("name_ro", "?"))
         cat = self.cat_v.get() if self.cat_v else ""
         if self.info_lbl:
-            self.info_lbl.config(
-                text=f"{call} | {nm} | {cat} | QSO: {len(self.log)}")
+            self.info_lbl.config(text=f"{call} | {nm} | {cat} | QSO: {len(self.log)}")
         if self.sc_lbl:
             qp, mc, tot = Score.total(self.log, cc, self.cfg)
             if cc.get("scoring_mode", "none") != "none":
@@ -1880,9 +2035,8 @@ class App(tk.Tk):
                 self.sc_lbl.config(text="")
         if self.rate_lbl and len(self.log) >= 2:
             try:
-                recent = [q for q in self.log[:20]]
                 dts = []
-                for q in recent:
+                for q in self.log[:20]:
                     try:
                         dts.append(datetime.datetime.strptime(
                             q.get("d", "") + " " + q.get("t", ""), "%Y-%m-%d %H:%M"))
@@ -1902,6 +2056,30 @@ class App(tk.Tk):
         now = datetime.datetime.utcnow()
         return now.strftime("%Y-%m-%d"), now.strftime("%H:%M")
 
+    def _get_exchange_sent(self, q):
+        """Get the exchange sent based on contest exchange_format."""
+        cc = self._cc()
+        ef = cc.get("exchange_format", "none")
+        if ef == "county":
+            return self.cfg.get("county", self.cfg.get("jud", "--"))
+        elif ef == "grid":
+            return self.cfg.get("loc", "--")
+        elif ef == "serial":
+            return q.get("ss", "--")
+        elif ef == "zone":
+            return self.cfg.get("jud", "--")
+        return q.get("ss", "") or q.get("n", "") or "--"
+
+    def _get_exchange_rcvd(self, q):
+        """Get the exchange received based on contest exchange_format."""
+        cc = self._cc()
+        ef = cc.get("exchange_format", "none")
+        if ef == "serial":
+            return q.get("sr", "--")
+        note = q.get("n", "").strip()
+        sr = q.get("sr", "").strip()
+        return sr or note or "--"
+
     def _add_qso(self):
         try:
             self._do_add_qso()
@@ -1917,32 +2095,25 @@ class App(tk.Tk):
         mode = self.ent["mode"].get()
         if not band or not mode:
             return
-        cc = self._cc()
-
         if not isinstance(self.log, list):
             self.log = list(self.log) if self.log else []
-
         if self.edit_idx is not None and self.edit_idx >= len(self.log):
             self.edit_idx = None
             if self.log_btn:
                 self.log_btn.config(text=L.t("log"), bg=TH["accent"])
-
         dup, di = Score.is_dup(self.log, call, band, mode, self.edit_idx)
         if dup and self.edit_idx is None:
             if self._sounds():
                 beep("warning")
             if not messagebox.askyesno(L.t("dup_warn"),
-                                        L.t("dup_msg").format(call, band, mode,
-                                                               len(self.log) - di)):
+                                        L.t("dup_msg").format(call, band, mode, len(self.log) - di)):
                 return
-
         ds, ts = self._get_dt()
-        q_preview = {"c": call, "b": band, "m": mode,
-                      "n": self.ent["note"].get().upper().strip()}
+        cc = self._cc()
+        q_preview = {"c": call, "b": band, "m": mode, "n": self.ent["note"].get().upper().strip()}
         if Score.is_new_mult(self.log, q_preview, cc):
             if self._sounds():
                 beep("info")
-
         q = {
             "c": call, "b": band, "m": mode,
             "s": self.ent["rst_s"].get().strip() or "59",
@@ -1955,7 +2126,6 @@ class App(tk.Tk):
             q["ss"] = self.ent["ss"].get().strip()
         if "sr" in self.ent:
             q["sr"] = self.ent["sr"].get().strip()
-
         if self.edit_idx is not None:
             self.log[self.edit_idx] = q
             self.edit_idx = None
@@ -1965,7 +2135,6 @@ class App(tk.Tk):
             self.log.insert(0, q)
             self.undo_stack.append(("add", 0, q))
             self.serial += 1
-
         self._clr()
         self._refresh()
         DM.save_log(self._cid(), self.log)
@@ -2053,27 +2222,25 @@ class App(tk.Tk):
             self.ent["call"].icursor(min(pos, len(c)))
         except Exception:
             pass
-        if self.wb_lbl:
-            if len(c) >= 3:
-                band = self.ent["band"].get()
-                mode = self.ent["mode"].get()
-                dup, _ = Score.is_dup(self.log, c, band, mode, self.edit_idx)
-                if dup:
-                    self.wb_lbl.config(text="⚠ DUP", fg=TH["err"])
-                elif Score.worked_other(self.log, c, band, mode):
-                    self.wb_lbl.config(text=f"ℹ {L.t('wb')}", fg=TH["warn"])
-                else:
-                    self.wb_lbl.config(text="")
+        if self.wb_lbl and len(c) >= 3:
+            band = self.ent["band"].get()
+            mode = self.ent["mode"].get()
+            dup, _ = Score.is_dup(self.log, c, band, mode, self.edit_idx)
+            if dup:
+                self.wb_lbl.config(text="⚠ DUP", fg=TH["err"])
+            elif Score.worked_other(self.log, c, band, mode):
+                self.wb_lbl.config(text=f"ℹ {L.t('wb')}", fg=TH["warn"])
             else:
                 self.wb_lbl.config(text="")
+        elif self.wb_lbl:
+            self.wb_lbl.config(text="")
 
     def _on_freq_out(self, e=None):
         f = self.ent["freq"].get().strip()
         if f:
             b = freq2band(f)
             if b:
-                cc = self._cc()
-                ab = cc.get("allowed_bands", BANDS_ALL)
+                ab = self._cc().get("allowed_bands", BANDS_ALL)
                 if b in ab:
                     self.ent["band"].set(b)
 
@@ -2106,6 +2273,9 @@ class App(tk.Tk):
         self._rebuild()
 
     def _on_cchange(self, e):
+        if not messagebox.askyesno(L.t("confirm_del"), L.t("switch_conf")):
+            self.cv.set(self._cid())
+            return
         DM.save_log(self._cid(), self.log)
         self.cfg["contest"] = self.cv.get()
         DM.save("config.json", self.cfg)
@@ -2140,9 +2310,8 @@ class App(tk.Tk):
         if self.led_c:
             self.led_c.itemconfig(self.led, fill=TH["led_off"] if m else TH["led_on"])
         if self.st_lbl:
-            self.st_lbl.config(
-                text=L.t("offline") if m else L.t("online"),
-                fg=TH["led_off"] if m else TH["led_on"])
+            self.st_lbl.config(text=L.t("offline") if m else L.t("online"),
+                                fg=TH["led_off"] if m else TH["led_on"])
         self.cfg["manual_dt"] = m
 
     def _save_cat(self):
@@ -2221,7 +2390,7 @@ class App(tk.Tk):
         d.geometry("460x280")
         d.configure(bg=TH["bg"])
         d.transient(self)
-        tk.Label(d, text="📻 YO Log PRO v16.3", bg=TH["bg"], fg=TH["accent"],
+        tk.Label(d, text="📻 YO Log PRO v16.4", bg=TH["bg"], fg=TH["accent"],
                  font=("Consolas", 16, "bold")).pack(pady=12)
         tk.Label(d, text=L.t("credits"), bg=TH["bg"], fg=TH["fg"], font=self.fn).pack(pady=8)
         tk.Label(d, text=L.t("usage"), bg=TH["bg"], fg=TH["fg"],
@@ -2233,7 +2402,7 @@ class App(tk.Tk):
     def _settings(self):
         d = tk.Toplevel(self)
         d.title(L.t("settings"))
-        d.geometry("420x500")
+        d.geometry("420x540")
         d.configure(bg=TH["bg"])
         d.transient(self)
         eo = {"bg": TH["entry_bg"], "fg": TH["fg"], "font": self.fn,
@@ -2246,6 +2415,7 @@ class App(tk.Tk):
             ("op_name", L.t("op"),        self.cfg.get("op_name", "")),
             ("power",   L.t("power"),     self.cfg.get("power", "100")),
             ("email",   L.t("email_l"),   self.cfg.get("email", "")),
+            ("soapbox", L.t("soapbox_l"), self.cfg.get("soapbox", "73 GL")),
             ("fs",      L.t("font_size"), str(self.cfg.get("fs", 11))),
         ]
         es = {}
@@ -2299,8 +2469,7 @@ class App(tk.Tk):
         try:
             raw = json.dumps(self.log, ensure_ascii=False, sort_keys=True)
             h = hashlib.md5(raw.encode("utf-8")).hexdigest()
-            messagebox.showinfo(L.t("hash_ok"),
-                                 L.t("verify_ok").format(len(self.log), h))
+            messagebox.showinfo(L.t("hash_ok"), L.t("verify_ok").format(len(self.log), h))
         except Exception as e:
             messagebox.showerror(L.t("error"), str(e))
 
@@ -2318,15 +2487,16 @@ class App(tk.Tk):
     def _import_menu(self):
         d = tk.Toplevel(self)
         d.title(L.t("import_log"))
-        d.geometry("260x150")
+        d.geometry("280x190")
         d.configure(bg=TH["bg"])
         d.transient(self)
-        tk.Button(d, text="ADIF (.adi / .adif)",
-                  command=lambda: [d.destroy(), self._import_adif()],
-                  bg=TH["accent"], fg="white", width=22).pack(pady=8)
-        tk.Button(d, text="CSV (.csv)",
-                  command=lambda: [d.destroy(), self._import_csv()],
-                  bg=TH["accent"], fg="white", width=22).pack(pady=8)
+        for txt, cmd in [
+            ("ADIF (.adi / .adif)", lambda: [d.destroy(), self._import_adif()]),
+            ("CSV (.csv)",          lambda: [d.destroy(), self._import_csv()]),
+            ("Cabrillo (.log)",     lambda: [d.destroy(), self._import_cabrillo()]),
+        ]:
+            tk.Button(d, text=txt, command=cmd,
+                      bg=TH["accent"], fg="white", width=24).pack(pady=6)
         center_dialog(d, self)
 
     def _import_adif(self):
@@ -2335,15 +2505,7 @@ class App(tk.Tk):
             try:
                 with open(fp, "r", encoding="utf-8", errors="replace") as f:
                     qsos = Importer.parse_adif(f.read())
-                if qsos:
-                    if not isinstance(self.log, list):
-                        self.log = []
-                    self.log.extend(qsos)
-                    self._refresh()
-                    DM.save_log(self._cid(), self.log)
-                    messagebox.showinfo("OK", L.t("imp_ok").format(len(qsos)))
-                else:
-                    messagebox.showwarning("", "0 QSO importate / imported.")
+                self._do_import(qsos)
             except Exception as e:
                 messagebox.showerror(L.t("error"), str(e))
 
@@ -2353,22 +2515,49 @@ class App(tk.Tk):
             try:
                 with open(fp, "r", encoding="utf-8", errors="replace") as f:
                     qsos = Importer.parse_csv(f.read())
-                if qsos:
-                    if not isinstance(self.log, list):
-                        self.log = []
-                    self.log.extend(qsos)
-                    self._refresh()
-                    DM.save_log(self._cid(), self.log)
-                    messagebox.showinfo("OK", L.t("imp_ok").format(len(qsos)))
-                else:
-                    messagebox.showwarning("", "0 QSO importate / imported.")
+                self._do_import(qsos)
             except Exception as e:
                 messagebox.showerror(L.t("error"), str(e))
+
+    def _import_cabrillo(self):
+        fp = filedialog.askopenfilename(filetypes=[("Cabrillo", "*.log"), ("All", "*.*")])
+        if fp:
+            try:
+                with open(fp, "r", encoding="utf-8", errors="replace") as f:
+                    qsos = Importer.parse_cabrillo(f.read())
+                self._do_import(qsos)
+            except Exception as e:
+                messagebox.showerror(L.t("error"), str(e))
+
+    def _do_import(self, qsos):
+        if qsos:
+            if not isinstance(self.log, list):
+                self.log = []
+            self.log.extend(qsos)
+            self.serial = len(self.log) + 1
+            self._refresh()
+            DM.save_log(self._cid(), self.log)
+            messagebox.showinfo("OK", L.t("imp_ok").format(len(qsos)))
+        else:
+            messagebox.showwarning("", "0 QSO importate / imported.")
+
+    def _check_before_export(self):
+        """Validate log and warn before export. Returns True if OK to proceed."""
+        if not self.log:
+            messagebox.showwarning(L.t("error"), "Log gol / Empty log!")
+            return False
+        ok, msg, _ = Score.validate(self.log, self._cc(), self.cfg)
+        if not ok:
+            return messagebox.askyesno(L.t("exp_warn"),
+                                        L.t("exp_warn_msg").format(msg))
+        # Auto-backup before export
+        DM.backup(self._cid(), self.log)
+        return True
 
     def _export_dlg(self):
         d = tk.Toplevel(self)
         d.title(L.t("export"))
-        d.geometry("280x280")
+        d.geometry("300x310")
         d.configure(bg=TH["bg"])
         d.transient(self)
         for txt, cmd in [
@@ -2380,23 +2569,20 @@ class App(tk.Tk):
             (L.t("exp_print"),          lambda: self._exp_print(d)),
         ]:
             tk.Button(d, text=txt, command=cmd,
-                      bg=TH["accent"], fg="white", width=26).pack(pady=4)
+                      bg=TH["accent"], fg="white", width=28).pack(pady=4)
         center_dialog(d, self)
 
     def _exp_cab(self, parent=None):
-        """Export Cabrillo 3.0 format."""
+        if not self._check_before_export():
+            return
         try:
             my = self.cfg.get("call", "NOCALL")
             cc = self._cc()
-            nm = cc.get("name_en", cc.get("name_ro", "CONTEST"))
+            nm = cc.get("cabrillo_name", "") or cc.get("name_en", cc.get("name_ro", "CONTEST"))
             cat_op = "SINGLE-OP"
             cat_band = "ALL"
-            cat_power = "HIGH"
             pw = int(self.cfg.get("power", "100"))
-            if pw <= 5:
-                cat_power = "QRP"
-            elif pw <= 100:
-                cat_power = "LOW"
+            cat_power = "QRP" if pw <= 5 else ("LOW" if pw <= 100 else "HIGH")
             lines = [
                 "START-OF-LOG: 3.0",
                 f"CONTEST: {nm}",
@@ -2405,46 +2591,54 @@ class App(tk.Tk):
                 f"CATEGORY-OPERATOR: {cat_op}",
                 f"CATEGORY-BAND: {cat_band}",
                 f"CATEGORY-POWER: {cat_power}",
-                f"CATEGORY-MODE: MIXED",
+                "CATEGORY-MODE: MIXED",
                 f"NAME: {self.cfg.get('op_name', '')}",
                 f"ADDRESS: {self.cfg.get('addr', '')}",
-                f"SOAPBOX: Logged with YO Log PRO v16.3",
-                "CREATED-BY: YO Log PRO v16.3",
+                f"SOAPBOX: Logged with YO Log PRO v16.4",
+                f"SOAPBOX: {self.cfg.get('soapbox', '73 GL')}",
+                "CREATED-BY: YO Log PRO v16.4",
             ]
             for q in self.log:
                 freq = q.get("f", "") or str(BAND_FREQ.get(q.get("b", ""), 0))
-                rst_s = q.get("s", "59")
-                rst_r = q.get("r", "59")
-                exch_s = q.get("ss", q.get("n", ""))
-                exch_r = q.get("sr", q.get("n", ""))
-                mode = q.get("m", "SSB")
+                try:
+                    freq = str(int(float(freq)))
+                except Exception:
+                    pass
+                exch_s = self._get_exchange_sent(q)
+                exch_r = self._get_exchange_rcvd(q)
                 date = q.get("d", "").replace("-", "")
                 time = q.get("t", "").replace(":", "")
-                call = q.get("c", "")
                 lines.append(
-                    f"QSO: {freq:>6} {mode:<5} {date} "
-                    f"{time} "
-                    f"{my:<13} {rst_s:<4} {exch_s:<10} "
-                    f"{call:<13} {rst_r:<4} {exch_r}")
+                    f"QSO: {freq:>6} {q.get('m', 'SSB'):<5} {date} {time} "
+                    f"{my:<13} {q.get('s', '59'):<4} {exch_s:<10} "
+                    f"{q.get('c', ''):<13} {q.get('r', '59'):<4} {exch_r}")
             lines.append("END-OF-LOG:")
-            fn = f"cabrillo_{self._cid()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.log"
-            fp = os.path.join(get_data_dir(), fn)
-            with open(fp, "w", encoding="utf-8") as f:
-                f.write("\n".join(lines))
-            messagebox.showinfo(L.t("exp_ok"), f"→ {fn}")
+            content = "\n".join(lines)
+
+            def do_save(text):
+                fn = f"cabrillo3_{self._cid()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.log"
+                fp = filedialog.asksaveasfilename(
+                    defaultextension=".log", filetypes=[("Cabrillo", "*.log")], initialfile=fn)
+                if fp:
+                    with open(fp, "w", encoding="utf-8") as f:
+                        f.write(text)
+                    messagebox.showinfo(L.t("exp_ok"), f"→ {os.path.basename(fp)}")
+
+            PreviewDialog(self, L.t("preview_t") + " — Cabrillo 3.0", content, do_save)
             if parent:
                 parent.destroy()
         except Exception as e:
             messagebox.showerror(L.t("error"), str(e))
 
     def _exp_cab2(self, parent=None):
-        """Export Cabrillo 2.0 format (compatible with LOGIX and similar programs)."""
+        if not self._check_before_export():
+            return
         try:
             my = self.cfg.get("call", "NOCALL")
             cc = self._cc()
-            nm = cc.get("name_en", cc.get("name_ro", "CONTEST")).upper()
+            nm = cc.get("cabrillo_name", "") or cc.get("name_en", cc.get("name_ro", "CONTEST"))
+            nm = nm.upper()
 
-            # ── Category number: extract from first letter A=1, B=2, etc. ──
             cat_val = self.cat_v.get() if self.cat_v else ""
             cat_num = "1"
             if cat_val:
@@ -2456,13 +2650,11 @@ class App(tk.Tk):
                     if cat_val in cats:
                         cat_num = str(cats.index(cat_val) + 1)
 
-            # ── Claimed score ──
             _, _, tot = Score.total(self.log, cc, self.cfg)
 
-            # ── Header ──
             lines = [
                 "START-OF-LOG: 2.0",
-                "CREATED BY: YO Log PRO v16.3",
+                "CREATED BY: YO Log PRO v16.4",
                 f"CONTEST: {nm}",
                 f"CALLSIGN: {my}",
                 f"NAME: {self.cfg.get('op_name', '')}",
@@ -2470,70 +2662,58 @@ class App(tk.Tk):
                 f"CLAIMED-SCORE: {tot}",
                 f"ADDRESS: {self.cfg.get('addr', '')}",
                 f"EMAIL: {self.cfg.get('email', '')}",
-                "SOAPBOX: Logged with YO Log PRO v16.3",
-                "SOAPBOX: 73 GL",
+                "SOAPBOX: Logged with YO Log PRO v16.4",
+                f"SOAPBOX: {self.cfg.get('soapbox', '73 GL')}",
                 "SOAPBOX:  mo  yyyy mm dd hhmm call         rs exc call          rs exc",
                 "SOAPBOX:  ** ********** **** ************* **  ** ************* **  **",
             ]
 
-            # ── My exchange (county or serial placeholder) ──
-            my_county = self.cfg.get("county", self.cfg.get("jud", "--"))
-
             for q in self.log:
                 freq = q.get("f", "") or str(BAND_FREQ.get(q.get("b", ""), 0))
-                mode_raw = q.get("m", "SSB")
-                mode = CAB2_MODE_MAP.get(mode_raw, "PH")
-
-                # Date with hyphens (2026-03-05)
+                try:
+                    freq = str(int(float(freq)))
+                except Exception:
+                    pass
+                mode = CAB2_MODE_MAP.get(q.get("m", "SSB"), "PH")
                 date = q.get("d", "")
                 if len(date) == 8 and "-" not in date:
                     date = f"{date[:4]}-{date[4:6]}-{date[6:8]}"
-
-                # Time HHMM (no colon)
                 time_str = q.get("t", "").replace(":", "")[:4]
-
-                call = q.get("c", "")
-                rst_s = q.get("s", "59")
-                rst_r = q.get("r", "59")
-
-                # Exchange sent: serial number → county → "--"
-                exch_s = q.get("ss", "").strip()
-                if not exch_s:
-                    exch_s = my_county if my_county else "--"
-
-                # Exchange received: serial number → note → "--"
-                exch_r = q.get("sr", "").strip()
-                if not exch_r:
-                    note = q.get("n", "").strip()
-                    exch_r = note if note else "--"
+                exch_s = self._get_exchange_sent(q)
+                exch_r = self._get_exchange_rcvd(q)
 
                 lines.append(
                     f"QSO: {freq} {mode} {date} {time_str} "
-                    f"{my:<13} {rst_s:>2}  {exch_s:<2} "
-                    f"{call:<13} {rst_r:>2}  {exch_r:<2}"
-                )
+                    f"{my:<13} {q.get('s', '59'):>2}  {exch_s:<2} "
+                    f"{q.get('c', ''):<13} {q.get('r', '59'):>2}  {exch_r:<2}")
 
             lines.append("END-OF-LOG:")
+            content = "\n".join(lines)
 
-            fn = (f"cabrillo2_{self._cid()}_"
-                  f"{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.log")
-            fp = os.path.join(get_data_dir(), fn)
-            with open(fp, "w", encoding="utf-8") as f:
-                f.write("\n".join(lines))
-            messagebox.showinfo(L.t("exp_ok"), f"→ {fn}")
+            def do_save(text):
+                fn = f"cabrillo2_{self._cid()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.log"
+                fp = filedialog.asksaveasfilename(
+                    defaultextension=".log", filetypes=[("Cabrillo", "*.log")], initialfile=fn)
+                if fp:
+                    with open(fp, "w", encoding="utf-8") as f:
+                        f.write(text)
+                    messagebox.showinfo(L.t("exp_ok"), f"→ {os.path.basename(fp)}")
+
+            PreviewDialog(self, L.t("preview_t") + " — Cabrillo 2.0", content, do_save)
             if parent:
                 parent.destroy()
         except Exception as e:
             messagebox.showerror(L.t("error"), str(e))
 
     def _exp_adif(self, parent=None):
-        """Export ADIF 3.1 format."""
+        if not self._check_before_export():
+            return
         try:
             my_loc = self.cfg.get("loc", "")
             lines = [
                 "<ADIF_VER:5>3.1.0",
-                f"<PROGRAMID:14>YO_Log_PRO_v16",
-                "<PROGRAMVERSION:5>16.3",
+                "<PROGRAMID:14>YO_Log_PRO_v16",
+                "<PROGRAMVERSION:5>16.4",
                 f"<MY_GRIDSQUARE:{len(my_loc)}>{my_loc}",
                 "<EOH>",
             ]
@@ -2541,13 +2721,9 @@ class App(tk.Tk):
                 c = q.get("c", "")
                 b = q.get("b", "40m")
                 m = q.get("m", "SSB")
-                rst_s = q.get("s", "59")
-                rst_r = q.get("r", "59")
                 dc = q.get("d", "").replace("-", "")
                 tc = q.get("t", "").replace(":", "") + "00"
                 note = q.get("n", "")
-                ss = q.get("ss", "")
-                sr = q.get("sr", "")
                 freq_khz = q.get("f", "")
                 freq_mhz = ""
                 if freq_khz:
@@ -2557,14 +2733,12 @@ class App(tk.Tk):
                         pass
 
                 def af(tag, val):
-                    if val:
-                        return f"<{tag}:{len(str(val))}>{val}"
-                    return ""
+                    return f"<{tag}:{len(str(val))}>{val}" if val else ""
 
                 parts = [
                     af("CALL", c), af("BAND", b), af("MODE", m),
                     af("QSO_DATE", dc), af("TIME_ON", tc),
-                    af("RST_SENT", rst_s), af("RST_RCVD", rst_r),
+                    af("RST_SENT", q.get("s", "59")), af("RST_RCVD", q.get("r", "59")),
                 ]
                 if freq_mhz:
                     parts.append(af("FREQ", freq_mhz))
@@ -2572,107 +2746,102 @@ class App(tk.Tk):
                     parts.append(af("GRIDSQUARE", note))
                 elif note:
                     parts.append(af("COMMENT", note))
-                if ss:
-                    parts.append(af("STX", ss))
-                if sr:
-                    parts.append(af("SRX", sr))
+                if q.get("ss"):
+                    parts.append(af("STX", q["ss"]))
+                if q.get("sr"):
+                    parts.append(af("SRX", q["sr"]))
                 parts.append("<EOR>")
                 lines.append("".join(p for p in parts if p))
 
             fn = f"adif_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.adi"
-            fp = os.path.join(get_data_dir(), fn)
-            with open(fp, "w", encoding="utf-8") as f:
-                f.write("\n".join(lines))
-            messagebox.showinfo(L.t("exp_ok"), f"→ {fn}")
+            fp = filedialog.asksaveasfilename(
+                defaultextension=".adi", filetypes=[("ADIF", "*.adi")], initialfile=fn)
+            if fp:
+                with open(fp, "w", encoding="utf-8") as f:
+                    f.write("\n".join(lines))
+                messagebox.showinfo(L.t("exp_ok"), f"→ {os.path.basename(fp)}")
             if parent:
                 parent.destroy()
         except Exception as e:
             messagebox.showerror(L.t("error"), str(e))
 
     def _exp_csv(self, parent=None):
-        """Export CSV format."""
+        if not self._check_before_export():
+            return
         try:
             fn = f"log_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.csv"
-            fp = os.path.join(get_data_dir(), fn)
+            fp = filedialog.asksaveasfilename(
+                defaultextension=".csv", filetypes=[("CSV", "*.csv")], initialfile=fn)
+            if not fp:
+                return
+            cc = self._cc()
             with open(fp, "w", encoding="utf-8", newline='') as f:
                 w = csv.writer(f)
                 w.writerow(["Nr", "Date", "Time", "Call", "Freq", "Band",
                              "Mode", "RST_S", "RST_R", "Nr_S", "Nr_R",
                              "Note", "Country", "Score"])
-                cc = self._cc()
                 for i, q in enumerate(self.log):
                     country, _ = DXCC.lookup(q.get("c", ""))
-                    pts = Score.qso(q, cc, self.cfg)
                     w.writerow([
-                        len(self.log) - i,
-                        q.get("d", ""), q.get("t", ""), q.get("c", ""),
-                        q.get("f", ""), q.get("b", ""), q.get("m", ""),
-                        q.get("s", ""), q.get("r", ""),
-                        q.get("ss", ""), q.get("sr", ""),
-                        q.get("n", ""), country if country != "Unknown" else "",
-                        pts
+                        len(self.log) - i, q.get("d", ""), q.get("t", ""),
+                        q.get("c", ""), q.get("f", ""), q.get("b", ""),
+                        q.get("m", ""), q.get("s", ""), q.get("r", ""),
+                        q.get("ss", ""), q.get("sr", ""), q.get("n", ""),
+                        country if country != "Unknown" else "",
+                        Score.qso(q, cc, self.cfg)
                     ])
-            messagebox.showinfo(L.t("exp_ok"), f"→ {fn}")
+            messagebox.showinfo(L.t("exp_ok"), f"→ {os.path.basename(fp)}")
             if parent:
                 parent.destroy()
         except Exception as e:
             messagebox.showerror(L.t("error"), str(e))
 
     def _exp_edi(self, parent=None):
-        """Export EDI format."""
+        if not self._check_before_export():
+            return
         try:
             my = self.cfg.get("call", "NOCALL")
             my_loc = self.cfg.get("loc", "")
             cc = self._cc()
-            nm = cc.get("name_en", cc.get("name_ro", "VHF"))
+            nm = cc.get("cabrillo_name", "") or cc.get("name_en", cc.get("name_ro", "VHF"))
             now = datetime.datetime.utcnow()
             lines = [
-                "[REG1TEST;1]",
-                f"TName={nm}",
+                "[REG1TEST;1]", f"TName={nm}",
                 f"TDate={now.strftime('%y%m%d')};{now.strftime('%y%m%d')}",
-                f"PCall={my}",
-                f"PWWLo={my_loc}",
-                f"PExch=",
-                f"PAdr1={self.cfg.get('addr', '')}",
-                f"PBand=144",
-                f"PSect=",
-                "[Remarks]",
-                "Logged with YO Log PRO v16.3",
-                "[QSORecords]",
+                f"PCall={my}", f"PWWLo={my_loc}", "PExch=",
+                f"PAdr1={self.cfg.get('addr', '')}", "PBand=144", "PSect=",
+                "[Remarks]", "Logged with YO Log PRO v16.4", "[QSORecords]",
             ]
             for q in self.log:
                 dt = q.get("d", "").replace("-", "")[2:]
                 tm = q.get("t", "").replace(":", "")[:4]
-                call = q.get("c", "")
-                rst_s = q.get("s", "59")
-                rst_r = q.get("r", "59")
                 locator = q.get("n", "")
-                ss = q.get("ss", "")
-                sr = q.get("sr", "")
-                km = 0
-                if my_loc and Loc.valid(locator):
-                    km = Loc.dist(my_loc, locator)
+                km = int(Loc.dist(my_loc, locator)) if my_loc and Loc.valid(locator) else 0
                 lines.append(
-                    f"{dt};{tm};{call};1;{rst_s};{ss};{rst_r};{sr};{locator};{int(km)}")
+                    f"{dt};{tm};{q.get('c', '')};1;{q.get('s', '59')};{q.get('ss', '')};"
+                    f"{q.get('r', '59')};{q.get('sr', '')};{locator};{km}")
             fn = f"edi_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.edi"
-            fp = os.path.join(get_data_dir(), fn)
-            with open(fp, "w", encoding="utf-8") as f:
-                f.write("\n".join(lines))
-            messagebox.showinfo(L.t("exp_ok"), f"→ {fn}")
+            fp = filedialog.asksaveasfilename(
+                defaultextension=".edi", filetypes=[("EDI", "*.edi")], initialfile=fn)
+            if fp:
+                with open(fp, "w", encoding="utf-8") as f:
+                    f.write("\n".join(lines))
+                messagebox.showinfo(L.t("exp_ok"), f"→ {os.path.basename(fp)}")
             if parent:
                 parent.destroy()
         except Exception as e:
             messagebox.showerror(L.t("error"), str(e))
 
     def _exp_print(self, parent=None):
-        """Export printable text format."""
+        if not self._check_before_export():
+            return
         try:
             my = self.cfg.get("call", "NOCALL")
             cc = self._cc()
             nm = cc.get("name_" + L.g(), cc.get("name_ro", "?"))
             lines = [
                 f"{'=' * 90}",
-                f"YO Log PRO v16.3  —  {my}  —  {nm}",
+                f"YO Log PRO v16.4  —  {my}  —  {nm}",
                 f"Generat / Generated: {datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC",
                 f"{'=' * 90}",
                 f"{'Nr':<4} {'Call':<13} {'Freq':<8} {'Band':<6} {'Mode':<6} "
@@ -2680,22 +2849,22 @@ class App(tk.Tk):
                 f"{'-' * 90}",
             ]
             for i, q in enumerate(self.log):
-                nr = len(self.log) - i
                 country, _ = DXCC.lookup(q.get("c", ""))
-                pts = Score.qso(q, cc, self.cfg)
                 lines.append(
-                    f"{nr:<4} {q.get('c',''):<13} {q.get('f',''):<8} {q.get('b',''):<6} "
-                    f"{q.get('m',''):<6} {q.get('s',''):<5} {q.get('r',''):<5} "
-                    f"{q.get('n',''):<10} {country[:14]:<15} {q.get('d',''):<11} "
-                    f"{q.get('t',''):<6} {pts:<5}")
+                    f"{len(self.log)-i:<4} {q.get('c',''):<13} {q.get('f',''):<8} "
+                    f"{q.get('b',''):<6} {q.get('m',''):<6} {q.get('s',''):<5} "
+                    f"{q.get('r',''):<5} {q.get('n',''):<10} {country[:14]:<15} "
+                    f"{q.get('d',''):<11} {q.get('t',''):<6} {Score.qso(q, cc, self.cfg):<5}")
             lines.append(f"{'=' * 90}")
             qp, mc, tot = Score.total(self.log, cc, self.cfg)
             lines.append(f"Total QSO: {len(self.log)}  |  Score: {qp}×{mc}={tot}")
             fn = f"print_{self._cid()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.txt"
-            fp = os.path.join(get_data_dir(), fn)
-            with open(fp, "w", encoding="utf-8") as f:
-                f.write("\n".join(lines))
-            messagebox.showinfo(L.t("exp_ok"), f"→ {fn}")
+            fp = filedialog.asksaveasfilename(
+                defaultextension=".txt", filetypes=[("Text", "*.txt")], initialfile=fn)
+            if fp:
+                with open(fp, "w", encoding="utf-8") as f:
+                    f.write("\n".join(lines))
+                messagebox.showinfo(L.t("exp_ok"), f"→ {os.path.basename(fp)}")
             if parent:
                 parent.destroy()
         except Exception as e:
@@ -2720,7 +2889,6 @@ class App(tk.Tk):
             self.destroy()
 
 
-# ─── Entry point ──────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     app = App()
     app.mainloop()
