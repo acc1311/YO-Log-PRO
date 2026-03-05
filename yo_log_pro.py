@@ -1293,25 +1293,33 @@ class TimerDialog(tk.Toplevel):
         self._start_btn.config(text=L.t("timer_start"), bg=TH["ok"])
 
     def _tick(self):
+        try:
+            if not self.winfo_exists():
+                return
+        except Exception:
+            return
         if self._running and self._elapsed_start:
             now = datetime.datetime.utcnow()
             elapsed = int((now - self._elapsed_start).total_seconds()) + self._elapsed_secs
             h, rem = divmod(elapsed, 3600)
             m, s = divmod(rem, 60)
-            self._time_lbl.config(text=f"{h:02d}:{m:02d}:{s:02d}")
-            if self._end_time:
-                remaining = int((self._end_time - now).total_seconds())
-                if remaining <= 0:
-                    self._running = False
-                    self._time_lbl.config(fg=TH["err"])
-                    self._rem_lbl.config(text="⏰ TIMP EXPIRAT / TIME UP!", fg=TH["err"])
-                    beep("error")
-                else:
-                    rh, rrem = divmod(remaining, 3600)
-                    rm, rs = divmod(rrem, 60)
-                    self._rem_lbl.config(
-                        text=f"{L.t('remaining')} {rh:02d}:{rm:02d}:{rs:02d}",
-                        fg=TH["warn"] if remaining < 300 else TH["fg"])
+            try:
+                self._time_lbl.config(text=f"{h:02d}:{m:02d}:{s:02d}")
+                if self._end_time:
+                    remaining = int((self._end_time - now).total_seconds())
+                    if remaining <= 0:
+                        self._running = False
+                        self._time_lbl.config(fg=TH["err"])
+                        self._rem_lbl.config(text="⏰ TIMP EXPIRAT / TIME UP!", fg=TH["err"])
+                        beep("error")
+                    else:
+                        rh, rrem = divmod(remaining, 3600)
+                        rm, rs = divmod(rrem, 60)
+                        self._rem_lbl.config(
+                            text=f"{L.t('remaining')} {rh:02d}:{rm:02d}:{rs:02d}",
+                            fg=TH["warn"] if remaining < 300 else TH["fg"])
+            except Exception:
+                return
         try:
             self.after(1000, self._tick)
         except Exception:
@@ -1880,7 +1888,15 @@ class App(tk.Tk):
             return
         band = self.ent["band"].get()
         mode = self.ent["mode"].get()
+        if not band or not mode:
+            return
         cc = self._cc()
+
+        # Guard edit_idx still valid (log may have changed)
+        if self.edit_idx is not None and self.edit_idx >= len(self.log):
+            self.edit_idx = None
+            if self.log_btn:
+                self.log_btn.config(text=L.t("log"), bg=TH["accent"])
 
         # Duplicate check
         dup, di = Score.is_dup(self.log, call, band, mode, self.edit_idx)
@@ -1902,21 +1918,22 @@ class App(tk.Tk):
 
         q = {
             "c": call, "b": band, "m": mode,
-            "s": self.ent["rst_s"].get() or "59",
-            "r": self.ent["rst_r"].get() or "59",
-            "n": self.ent["note"].get(),
+            "s": self.ent["rst_s"].get().strip() or "59",
+            "r": self.ent["rst_r"].get().strip() or "59",
+            "n": self.ent["note"].get().strip(),
             "d": ds, "t": ts,
-            "f": self.ent["freq"].get()
+            "f": self.ent["freq"].get().strip()
         }
         if "ss" in self.ent:
-            q["ss"] = self.ent["ss"].get()
+            q["ss"] = self.ent["ss"].get().strip()
         if "sr" in self.ent:
-            q["sr"] = self.ent["sr"].get()
+            q["sr"] = self.ent["sr"].get().strip()
 
         if self.edit_idx is not None:
             self.log[self.edit_idx] = q
             self.edit_idx = None
-            self.log_btn.config(text=L.t("log"), bg=TH["accent"])
+            if self.log_btn:
+                self.log_btn.config(text=L.t("log"), bg=TH["accent"])
         else:
             self.log.insert(0, q)
             self.undo_stack.append(("add", 0, q))
@@ -1942,7 +1959,13 @@ class App(tk.Tk):
         sel = self.tree.selection()
         if not sel:
             return
-        self.edit_idx = int(sel[0])
+        try:
+            idx = int(sel[0])
+        except (ValueError, TypeError):
+            return
+        if idx < 0 or idx >= len(self.log):
+            return
+        self.edit_idx = idx
         q = self.log[self.edit_idx]
         self.ent["call"].delete(0, "end")
         self.ent["call"].insert(0, q.get("c", ""))
@@ -1969,7 +1992,8 @@ class App(tk.Tk):
         if "sr" in self.ent:
             self.ent["sr"].delete(0, "end")
             self.ent["sr"].insert(0, q.get("sr", ""))
-        self.log_btn.config(text=L.t("update"), bg=TH["warn"])
+        if self.log_btn:
+            self.log_btn.config(text=L.t("update"), bg=TH["warn"])
 
     def _del_sel(self):
         sel = self.tree.selection()
@@ -2064,14 +2088,18 @@ class App(tk.Tk):
         self._rebuild()
 
     def _cycle_band(self, e=None):
-        ab = self._cc().get("allowed_bands", BANDS_ALL)
+        ab = self._cc().get("allowed_bands", BANDS_ALL) or BANDS_ALL
+        if not ab:
+            return
         cur = self.ent["band"].get()
         idx = (ab.index(cur) + 1) % len(ab) if cur in ab else 0
         self.ent["band"].set(ab[idx])
         self._on_band_change()
 
     def _cycle_mode(self, e=None):
-        am = self._cc().get("allowed_modes", MODES_ALL)
+        am = self._cc().get("allowed_modes", MODES_ALL) or MODES_ALL
+        if not am:
+            return
         cur = self.ent["mode"].get()
         idx = (am.index(cur) + 1) % len(am) if cur in am else 0
         self.ent["mode"].set(am[idx])
@@ -2125,14 +2153,24 @@ class App(tk.Tk):
 
     # ── clocks / timers ──────────────────────────────────────────────────────
     def _tick_clock(self):
-        now = datetime.datetime.utcnow()
-        if self.clk:
-            self.clk.config(text=f"UTC {now.strftime('%H:%M:%S')}")
-        self.after(1000, self._tick_clock)
+        try:
+            if not self.winfo_exists():
+                return
+            now = datetime.datetime.utcnow()
+            if self.clk:
+                self.clk.config(text=f"UTC {now.strftime('%H:%M:%S')}")
+            self.after(1000, self._tick_clock)
+        except Exception:
+            pass
 
     def _tick_save(self):
-        DM.save_log(self._cid(), self.log)
-        self.after(60000, self._tick_save)
+        try:
+            if not self.winfo_exists():
+                return
+            DM.save_log(self._cid(), self.log)
+            self.after(60000, self._tick_save)
+        except Exception:
+            pass
 
     def _fsave(self):
         DM.save_log(self._cid(), self.log)
@@ -2340,11 +2378,15 @@ class App(tk.Tk):
                 rst_r = q.get("r", "59")
                 exch_s = q.get("ss", q.get("n", ""))
                 exch_r = q.get("sr", q.get("n", ""))
+                mode = q.get("m", "SSB")
+                date = q.get("d", "").replace("-", "")
+                time = q.get("t", "").replace(":", "")
+                call = q.get("c", "")
                 lines.append(
-                    f"QSO: {freq:>6} {q['m']:<5} {q['d'].replace('-', '')} "
-                    f"{q['t'].replace(':', '')} "
+                    f"QSO: {freq:>6} {mode:<5} {date} "
+                    f"{time} "
                     f"{my:<13} {rst_s:<4} {exch_s:<10} "
-                    f"{q['c']:<13} {rst_r:<4} {exch_r}")
+                    f"{call:<13} {rst_r:<4} {exch_r}")
             lines.append("END-OF-LOG:")
             fn = f"cabrillo_{self._cid()}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.log"
             fp = os.path.join(get_data_dir(), fn)
