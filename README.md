@@ -31,7 +31,7 @@ FIXES v16.2:
 - Clear log with backup
 """
 <p align="center">
-  <img src="https://img.shields.io/badge/version-16.0_FINAL-blue?style=for-the-badge" alt="Version">
+  <img src="https://img.shields.io/badge/version-16.2_FINAL-blue?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/python-3.8%2B-green?style=for-the-badge&logo=python" alt="Python">
   <img src="https://img.shields.io/badge/license-MIT-orange?style=for-the-badge" alt="License">
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey?style=for-the-badge" alt="Platform">
