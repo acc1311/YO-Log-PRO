@@ -1,6 +1,35 @@
 
-# 📻 YO Log PRO v16.0 FINAL — Professional Multi-Contest Amateur Radio Logger
+# 📻 YO Log PRO v16.2 FINAL — Professional Multi-Contest Amateur Radio Logger
+"""
+YO Log PRO v16.1 FINAL — Professional Multi-Contest Amateur Radio Logger
+Developed by: Ardei Constantin-Cătălin (YO8ACR)
+Email: yo8acr@gmail.com
 
+FIXES v16.2:
+- FIXED: 'dict' object has no attribute 'insert' — DM.load() returned {} instead of []
+- FIXED: All popup dialogs now center on parent window
+- ContestEditor: fields for categories, bands, modes, required_stations, special_scoring, band_points, county_list fully editable
+- ContestMgr: Duplicate + Export + Import buttons added
+- Stats window: full detailed stats (bands, modes, DXCC, worked-all, operating time, rate)
+- Cabrillo export: full 3.0 header with CONTEST, CATEGORY-*, NAME, ADDRESS, SOAPBOX
+- ADIF export: FREQ in MHz, GRIDSQUARE, MY_GRIDSQUARE, STX, SRX
+- EDI export: added
+- Print text export: added
+- Validate: improved messages, checks forbidden bands/modes
+- Score label: shows Σ QSO×MULT=TOTAL format
+- Worked-before indicator: shows worked other band/mode in yellow
+- Search dialog: Ctrl+F, live filter
+- Timer dialog: contest countdown
+- Hash verify: MD5 check
+- Sound: beep on new multiplier, duplicate
+- Settings: addr, font size, sounds checkbox
+- Config: category/county save button fixed
+- Rate meter: QSO/h live
+- Geometry save/restore
+- Scrollbar on ContestEditor (tall form)
+- Auto-RST on band change fix
+- Clear log with backup
+"""
 <p align="center">
   <img src="https://img.shields.io/badge/version-16.0_FINAL-blue?style=for-the-badge" alt="Version">
   <img src="https://img.shields.io/badge/python-3.8%2B-green?style=for-the-badge&logo=python" alt="Python">
