@@ -9,6 +9,7 @@
 - ✅ **REZOLVAT:** Doar indicativul și nota se șterg după logare
 - ✅ **ÎMBUNĂTĂȚIT:** Fluxul de operare este acum **mult mai rapid** — nu mai trebuie să setați banda/modul/RST la fiecare QSO
 - ✅ **NOU:** Buton **Reset** complet separat pentru ștergere totală câmpuri
+- ✅ **Dacă e eroare DLL: instalați vcredist_x64.exe
 
 **ÎMBUNĂTĂȚIRI CABRILLO 2.0 (v16.4 → v16.5):**
 - ✅ **ADĂUGAT:** Export Cabrillo 2.0 cu dialog configurare exchange
